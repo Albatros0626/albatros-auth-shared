@@ -22,7 +22,9 @@ Used by Prospector V2, Cadence, Candidate Manager and future apps.
 pnpm add github:Albatros0626/albatros-auth-shared#v1.0.0
 ```
 
-The `prepare` script compiles TypeScript on install — no manual build step needed in the consumer.
+The `dist/` folder is committed to the repo, so consumer apps install zero-config (no `prepare` script, no `onlyBuiltDependencies` allowlist needed).
+
+**Maintainer note**: always run `pnpm run prerelease` before tagging (cleans + rebuilds + tests). Never commit a stale `dist/`.
 
 ## Public API
 

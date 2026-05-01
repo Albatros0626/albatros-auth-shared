@@ -1,7 +1,7 @@
 node_modules/
-dist/
 coverage/
 *.log
+*.tgz
 .DS_Store
 .idea/
 .vscode/
