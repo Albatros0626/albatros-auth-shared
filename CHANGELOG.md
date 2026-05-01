@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-01
+
+### Fixed
+- Renderer-process consumers (Electron renderer / browser) crashed when
+  importing from `@albatros/auth-shared` because the main entry transitively
+  pulls in `crypto`/`fs`/`electron` via `auth-service.ts` and
+  `secrets-service.ts`. Vite/esbuild cannot resolve those Node modules in a
+  browser bundle.
+
+### Added
+- New subpath export `@albatros/auth-shared/browser` with only the
+  browser-safe primitives:
+  - `createActivityTracker` and its types (`ActivityTracker`, `CreateActivityTrackerOpts`)
+  - Recovery questions constants (`RECOVERY_QUESTIONS`, `CUSTOM_QUESTION_MIN_LENGTH`, `RECOVERY_ANSWER_MIN_LENGTH`)
+  - `LockoutStatus` type re-export
+- Renderer code should import from `@albatros/auth-shared/browser`; main process keeps using the default `@albatros/auth-shared`.
+
 ## [1.0.0] - 2026-05-01
 
 US8 — First stable release.
