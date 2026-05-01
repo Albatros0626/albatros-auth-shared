@@ -54,3 +54,48 @@ export class VaultNotInitializedError extends Error {
     this.name = 'VaultNotInitializedError'
   }
 }
+
+export interface SafeStorageLike {
+  isEncryptionAvailable(): boolean
+  encryptString(plain: string): Buffer
+  decryptString(encrypted: Buffer): string
+}
+
+export interface SecretsVault {
+  version: number
+  secrets: Record<string, string>
+}
+
+export interface CreateSecretsServiceOpts {
+  vaultPath: string
+  allowlist: readonly string[]
+  safeStorage: SafeStorageLike
+}
+
+export class KeyNotAllowedError extends Error {
+  readonly code = 'KEY_NOT_ALLOWED'
+  readonly key: string
+  constructor(key: string) {
+    super(`Secret key not in allowlist: ${key}`)
+    this.name = 'KeyNotAllowedError'
+    this.key = key
+  }
+}
+
+export class DPAPIUnavailableError extends Error {
+  readonly code = 'DPAPI_UNAVAILABLE'
+  constructor() {
+    super('Secret storage unavailable (safeStorage not ready)')
+    this.name = 'DPAPIUnavailableError'
+  }
+}
+
+export class SecretsVaultVersionUnsupportedError extends Error {
+  readonly code = 'SECRETS_VAULT_VERSION_UNSUPPORTED'
+  readonly vaultVersion: number
+  constructor(vaultVersion: number) {
+    super(`Secrets vault version ${vaultVersion} is not supported.`)
+    this.name = 'SecretsVaultVersionUnsupportedError'
+    this.vaultVersion = vaultVersion
+  }
+}

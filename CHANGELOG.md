@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-01
+
+US3 — Secrets service ported.
+
+### Added
+- `createSecretsService({ vaultPath, allowlist, safeStorage })` factory:
+  - dependency-injected `safeStorage` (any object matching `SafeStorageLike` interface) — keeps the package decoupled from Electron at the type level
+  - per-app `allowlist` enforced strictly (`KeyNotAllowedError` on violation)
+  - vault path is per-app (secrets stay separate per app, only `auth.vault` is shared)
+- API: `setSecret`, `getSecret`, `hasSecret`, `deleteSecret`, `isAvailable`
+- Atomic write (`.tmp + rename`) preserves vault integrity on crash
+- `anonymizeKeyForLog` exported (logs anonymize keys: `ai.apiKey` → `ai.***`)
+- New typed errors: `KeyNotAllowedError`, `DPAPIUnavailableError`, `SecretsVaultVersionUnsupportedError`
+
+### Tests
+- 40 secrets-service tests covering allowlist, round-trip, hasSecret/deleteSecret, DPAPI unavailability, vault format, multi-instance, atomic write
+- Mock `SafeStorageLike` (no Electron dependency in test environment)
+- Coverage: 99.18% statements, 96.59% branches across all files (secrets-service: 96.06% / 93.33%)
+
 ## [0.2.0] - 2026-05-01
 
 US2 — Auth service ported.

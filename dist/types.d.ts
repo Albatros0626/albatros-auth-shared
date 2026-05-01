@@ -36,4 +36,32 @@ export declare class VaultNotInitializedError extends Error {
     readonly code = "VAULT_NOT_INITIALIZED";
     constructor();
 }
+export interface SafeStorageLike {
+    isEncryptionAvailable(): boolean;
+    encryptString(plain: string): Buffer;
+    decryptString(encrypted: Buffer): string;
+}
+export interface SecretsVault {
+    version: number;
+    secrets: Record<string, string>;
+}
+export interface CreateSecretsServiceOpts {
+    vaultPath: string;
+    allowlist: readonly string[];
+    safeStorage: SafeStorageLike;
+}
+export declare class KeyNotAllowedError extends Error {
+    readonly code = "KEY_NOT_ALLOWED";
+    readonly key: string;
+    constructor(key: string);
+}
+export declare class DPAPIUnavailableError extends Error {
+    readonly code = "DPAPI_UNAVAILABLE";
+    constructor();
+}
+export declare class SecretsVaultVersionUnsupportedError extends Error {
+    readonly code = "SECRETS_VAULT_VERSION_UNSUPPORTED";
+    readonly vaultVersion: number;
+    constructor(vaultVersion: number);
+}
 //# sourceMappingURL=types.d.ts.map

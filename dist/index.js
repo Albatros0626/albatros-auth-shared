@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
-exports.VERSION = '0.2.0';
+exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.SECRETS_VAULT_VERSION = exports.anonymizeKeyForLog = exports.createSecretsService = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
+exports.VERSION = '0.3.0';
 var auth_service_1 = require("./auth-service");
 Object.defineProperty(exports, "createAuthService", { enumerable: true, get: function () { return auth_service_1.createAuthService; } });
 Object.defineProperty(exports, "validateCode", { enumerable: true, get: function () { return auth_service_1.validateCode; } });
@@ -18,6 +18,10 @@ Object.defineProperty(exports, "LOCKOUT_DURATION_MS", { enumerable: true, get: f
 Object.defineProperty(exports, "DELAY_START_AT_ATTEMPT", { enumerable: true, get: function () { return auth_service_1.DELAY_START_AT_ATTEMPT; } });
 Object.defineProperty(exports, "DELAY_MAX_SECONDS", { enumerable: true, get: function () { return auth_service_1.DELAY_MAX_SECONDS; } });
 Object.defineProperty(exports, "DEFAULT_LOCK_TIMEOUT_MINUTES", { enumerable: true, get: function () { return auth_service_1.DEFAULT_LOCK_TIMEOUT_MINUTES; } });
+var secrets_service_1 = require("./secrets-service");
+Object.defineProperty(exports, "createSecretsService", { enumerable: true, get: function () { return secrets_service_1.createSecretsService; } });
+Object.defineProperty(exports, "anonymizeKeyForLog", { enumerable: true, get: function () { return secrets_service_1.anonymizeKeyForLog; } });
+Object.defineProperty(exports, "SECRETS_VAULT_VERSION", { enumerable: true, get: function () { return secrets_service_1.SECRETS_VAULT_VERSION; } });
 var recovery_questions_1 = require("./recovery-questions");
 Object.defineProperty(exports, "RECOVERY_QUESTIONS", { enumerable: true, get: function () { return recovery_questions_1.RECOVERY_QUESTIONS; } });
 Object.defineProperty(exports, "CUSTOM_QUESTION_MIN_LENGTH", { enumerable: true, get: function () { return recovery_questions_1.CUSTOM_QUESTION_MIN_LENGTH; } });
@@ -25,4 +29,7 @@ Object.defineProperty(exports, "RECOVERY_ANSWER_MIN_LENGTH", { enumerable: true,
 var types_1 = require("./types");
 Object.defineProperty(exports, "VaultVersionUnsupportedError", { enumerable: true, get: function () { return types_1.VaultVersionUnsupportedError; } });
 Object.defineProperty(exports, "VaultNotInitializedError", { enumerable: true, get: function () { return types_1.VaultNotInitializedError; } });
+Object.defineProperty(exports, "KeyNotAllowedError", { enumerable: true, get: function () { return types_1.KeyNotAllowedError; } });
+Object.defineProperty(exports, "DPAPIUnavailableError", { enumerable: true, get: function () { return types_1.DPAPIUnavailableError; } });
+Object.defineProperty(exports, "SecretsVaultVersionUnsupportedError", { enumerable: true, get: function () { return types_1.SecretsVaultVersionUnsupportedError; } });
 //# sourceMappingURL=index.js.map

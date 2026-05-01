@@ -1,4 +1,4 @@
-export const VERSION = '0.2.0' as const
+export const VERSION = '0.3.0' as const
 
 export {
   createAuthService,
@@ -21,6 +21,14 @@ export {
 export type { AuthService } from './auth-service'
 
 export {
+  createSecretsService,
+  anonymizeKeyForLog,
+  SECRETS_VAULT_VERSION,
+} from './secrets-service'
+
+export type { SecretsService } from './secrets-service'
+
+export {
   RECOVERY_QUESTIONS,
   CUSTOM_QUESTION_MIN_LENGTH,
   RECOVERY_ANSWER_MIN_LENGTH,
@@ -31,9 +39,15 @@ export type {
   AuthVault,
   SetupOpts,
   CreateAuthServiceOpts,
+  SafeStorageLike,
+  SecretsVault,
+  CreateSecretsServiceOpts,
 } from './types'
 
 export {
   VaultVersionUnsupportedError,
   VaultNotInitializedError,
+  KeyNotAllowedError,
+  DPAPIUnavailableError,
+  SecretsVaultVersionUnsupportedError,
 } from './types'
