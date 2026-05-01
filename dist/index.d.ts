@@ -1,4 +1,4 @@
-export declare const VERSION: "0.6.0";
+export declare const VERSION: "0.7.0";
 export { createAuthService, validateCode, normalizeAnswer, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST, SALT_LENGTH, CODE_MIN_LENGTH, VAULT_VERSION, SUPPORTED_VAULT_VERSIONS, LOCKOUT_THRESHOLD, LOCKOUT_DURATION_MS, DELAY_START_AT_ATTEMPT, DELAY_MAX_SECONDS, DEFAULT_LOCK_TIMEOUT_MINUTES, } from './auth-service';
 export type { AuthService } from './auth-service';
 export { createSecretsService, anonymizeKeyForLog, SECRETS_VAULT_VERSION, } from './secrets-service';
@@ -13,6 +13,8 @@ export { createActivityTracker } from './activity-tracker';
 export type { ActivityTracker, CreateActivityTrackerOpts } from './activity-tracker';
 export { createIdleWatcher, DEFAULT_IDLE_POLL_MS } from './idle-watcher';
 export type { IdleWatcher, CreateIdleWatcherOpts } from './idle-watcher';
+export { migrateLocalAuthToShared, detectMigrationConflict, appendMigrationLog, BACKUP_SUFFIX, } from './migration';
+export type { MigrationResult, MigrationOutcome, MigrateLocalAuthToSharedOpts, DetectMigrationConflictOpts, } from './migration';
 export { RECOVERY_QUESTIONS, CUSTOM_QUESTION_MIN_LENGTH, RECOVERY_ANSWER_MIN_LENGTH, } from './recovery-questions';
 export type { LockoutStatus, AuthVault, SetupOpts, CreateAuthServiceOpts, SafeStorageLike, SecretsVault, CreateSecretsServiceOpts, SessionContent, SessionState, SessionFileEnvelope, CreateSessionServiceOpts, } from './types';
 export { VaultVersionUnsupportedError, VaultNotInitializedError, KeyNotAllowedError, DPAPIUnavailableError, SecretsVaultVersionUnsupportedError, } from './types';

@@ -1,4 +1,4 @@
-export const VERSION = '0.6.0' as const
+export const VERSION = '0.7.0' as const
 
 export {
   createAuthService,
@@ -58,6 +58,19 @@ export type { ActivityTracker, CreateActivityTrackerOpts } from './activity-trac
 
 export { createIdleWatcher, DEFAULT_IDLE_POLL_MS } from './idle-watcher'
 export type { IdleWatcher, CreateIdleWatcherOpts } from './idle-watcher'
+
+export {
+  migrateLocalAuthToShared,
+  detectMigrationConflict,
+  appendMigrationLog,
+  BACKUP_SUFFIX,
+} from './migration'
+export type {
+  MigrationResult,
+  MigrationOutcome,
+  MigrateLocalAuthToSharedOpts,
+  DetectMigrationConflictOpts,
+} from './migration'
 
 export {
   RECOVERY_QUESTIONS,

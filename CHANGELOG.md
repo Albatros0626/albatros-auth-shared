@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-01
+
+US7 — Legacy → shared migration. Phase 2 complete.
+
+### Added
+- `migrateLocalAuthToShared({ localVaultPath, sharedVaultPath, appId, migrationLogPath? })` returns one of:
+  - `no-op-fresh-install` — neither vault exists
+  - `no-op-already-migrated` — shared exists, local missing
+  - `migrated` — local copied to shared, original renamed to `${localPath}.migrated.bak`
+  - `conflict-needs-resolution` — both exist; caller surfaces UX
+  - `error` — local file unreadable or atomic write failed; nothing destroyed
+- `detectMigrationConflict({ localVaultPath, sharedVaultPath })` — pure boolean check for the conflict scenario
+- `appendMigrationLog(logPath, entry)` — appends a JSONL entry; creates parent dirs if needed; logging failure is non-fatal
+- `BACKUP_SUFFIX` exported (`.migrated.bak`)
+
+### Design notes
+- Atomic write to shared (`.tmp + rename`); on failure, no shared file is left.
+- Local backup happens AFTER shared write succeeds. If backup rename fails, returns `error` with message — next run sees both files and triggers `conflict-needs-resolution` for user-driven resolution. No data is ever lost.
+- Vault format conversion (v1 → v2 with `lockTimeoutMinutes`) is delegated to `auth-service` on first read of the shared vault. Migration module is only concerned with file location, not content shape.
+
+### Tests
+- 23 migration tests covering: detection (4), outcomes (9), error paths (3), logging (5), multi-app scenarios (2)
+- migration.ts coverage: 95.14% statements, 96.42% branches
+- Total package: 219 tests, 98.35% statements / 95.22% branches
+
+### Phase 2 wrap-up
+The package now ships everything needed for cross-app session sharing:
+- Shared session file with DPAPI encryption + atomic write (US5)
+- Idle detection primitives — env-agnostic activity tracker + main-side watcher (US6)
+- Migration helpers for legacy → shared (US7)
+- Plus the Phase 1 core: auth-service, secrets-service, auth-state, guarded-handle.
+
+Next: Phase 3 — pre-release prep (US8) before consumer apps adopt.
+
 ## [0.6.0] - 2026-05-01
 
 US6 — Auto-lock primitives.
