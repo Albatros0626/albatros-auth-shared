@@ -185,6 +185,10 @@ useIdleLock({
 })
 ```
 
+## Integrating in a new app
+
+For step-by-step integration in a fresh Electron app, see **[docs/INTEGRATION.md](docs/INTEGRATION.md)** — it includes the auth-context template, IPC handler patterns, renderer hook, migration recipes, and a smoke-test checklist.
+
 ## Public API surface
 
 ```ts
