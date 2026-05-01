@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-01
+
+US5 — Session sync between apps (Phase 2 begins).
+
+### Added
+- `createSessionService({ sharedDir, appId, safeStorage })` factory:
+  - `read()` — returns `SessionState` (raw content + derived `isLocked`/`isExpired`/`isValid`) or `null`
+  - `recordUnlock({ lockTimeoutMinutes })` — fresh session token + appId stamped, atomic write
+  - `recordLock()` — sets `lockedAt`, no-op if no session exists
+  - `recordActivity()` — leading-skip + trailing-write throttle (default 10s, override via `activityThrottleMs`)
+  - `watch(cb)` — `fs.watch` with debounce (default 100ms, override via `watchDebounceMs`); returns unsubscribe
+- File on disk (`session.bin` in `sharedDir`):
+  - JSON envelope `{ version: 1, ciphertext: base64 }` (forward-compat with version field)
+  - Payload (DPAPI-encrypted): `unlockedAt`, `lastActivityAt`, `lockTimeoutMinutes`, `lockedAt`, `unlockerAppId`, `sessionToken` (32B hex)
+- Atomic write via `.tmp + rename`; tmp cleanup on encrypt failure preserves existing session
+- `mkdirSync({ recursive: true })` on first write — sharedDir created automatically
+- `read()` returns `null` (rather than throwing) on: missing file, corrupted JSON, unsupported version, DPAPI decrypt failure
+- `watch()` is robust to `ensureDir`/`fs.watch` failures: returns a working unsubscribe even if the watcher couldn't start (logs the error)
+
+### Tests
+- 33 session-service tests covering: unlock/lock/activity, file format, expiration logic, atomic write, multi-instance shared state, fs.watch debounce, watcher cleanup
+- Mock SafeStorage (no Electron coupling)
+- Coverage: session-service.ts 97.04% / 91.11% branches (above 90% target)
+- Total package coverage: 98.81% statements, 95.65% branches across 176 tests
+
 ## [0.4.0] - 2026-05-01
 
 US4 — Auth state + guarded IPC handle ported.

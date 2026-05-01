@@ -1,4 +1,4 @@
-export declare const VERSION: "0.4.0";
+export declare const VERSION: "0.5.0";
 export { createAuthService, validateCode, normalizeAnswer, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST, SALT_LENGTH, CODE_MIN_LENGTH, VAULT_VERSION, SUPPORTED_VAULT_VERSIONS, LOCKOUT_THRESHOLD, LOCKOUT_DURATION_MS, DELAY_START_AT_ATTEMPT, DELAY_MAX_SECONDS, DEFAULT_LOCK_TIMEOUT_MINUTES, } from './auth-service';
 export type { AuthService } from './auth-service';
 export { createSecretsService, anonymizeKeyForLog, SECRETS_VAULT_VERSION, } from './secrets-service';
@@ -7,7 +7,9 @@ export { createAuthState } from './auth-state';
 export type { AuthState, UnlockListener } from './auth-state';
 export { createGuardedHandle, NOT_UNLOCKED_ERROR, } from './guarded-handle';
 export type { GuardedHandle, GuardedError, CreateGuardedHandleOpts, IpcMainLike, IpcHandler, } from './guarded-handle';
+export { createSessionService, SESSION_FILENAME, SESSION_FILE_VERSION, DEFAULT_ACTIVITY_THROTTLE_MS, DEFAULT_WATCH_DEBOUNCE_MS, } from './session-service';
+export type { SessionService } from './session-service';
 export { RECOVERY_QUESTIONS, CUSTOM_QUESTION_MIN_LENGTH, RECOVERY_ANSWER_MIN_LENGTH, } from './recovery-questions';
-export type { LockoutStatus, AuthVault, SetupOpts, CreateAuthServiceOpts, SafeStorageLike, SecretsVault, CreateSecretsServiceOpts, } from './types';
+export type { LockoutStatus, AuthVault, SetupOpts, CreateAuthServiceOpts, SafeStorageLike, SecretsVault, CreateSecretsServiceOpts, SessionContent, SessionState, SessionFileEnvelope, CreateSessionServiceOpts, } from './types';
 export { VaultVersionUnsupportedError, VaultNotInitializedError, KeyNotAllowedError, DPAPIUnavailableError, SecretsVaultVersionUnsupportedError, } from './types';
 //# sourceMappingURL=index.d.ts.map

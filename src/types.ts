@@ -99,3 +99,36 @@ export class SecretsVaultVersionUnsupportedError extends Error {
     this.vaultVersion = vaultVersion
   }
 }
+
+export interface SessionContent {
+  unlockedAt: string
+  lastActivityAt: string
+  lockTimeoutMinutes: number
+  lockedAt: string | null
+  unlockerAppId: string
+  sessionToken: string
+}
+
+export interface SessionState extends SessionContent {
+  /** True if `now - lastActivityAt > lockTimeoutMinutes`. */
+  isExpired: boolean
+  /** True if `lockedAt !== null`. */
+  isLocked: boolean
+  /** True iff `!isLocked && !isExpired`. */
+  isValid: boolean
+}
+
+export interface SessionFileEnvelope {
+  version: number
+  ciphertext: string
+}
+
+export interface CreateSessionServiceOpts {
+  sharedDir: string
+  appId: string
+  safeStorage: SafeStorageLike
+  /** Activity write throttle in ms (default 10_000). Test-only override. */
+  activityThrottleMs?: number
+  /** Watch event debounce in ms (default 100). Test-only override. */
+  watchDebounceMs?: number
+}

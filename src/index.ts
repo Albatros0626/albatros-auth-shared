@@ -1,4 +1,4 @@
-export const VERSION = '0.4.0' as const
+export const VERSION = '0.5.0' as const
 
 export {
   createAuthService,
@@ -44,6 +44,16 @@ export type {
 } from './guarded-handle'
 
 export {
+  createSessionService,
+  SESSION_FILENAME,
+  SESSION_FILE_VERSION,
+  DEFAULT_ACTIVITY_THROTTLE_MS,
+  DEFAULT_WATCH_DEBOUNCE_MS,
+} from './session-service'
+
+export type { SessionService } from './session-service'
+
+export {
   RECOVERY_QUESTIONS,
   CUSTOM_QUESTION_MIN_LENGTH,
   RECOVERY_ANSWER_MIN_LENGTH,
@@ -57,6 +67,10 @@ export type {
   SafeStorageLike,
   SecretsVault,
   CreateSecretsServiceOpts,
+  SessionContent,
+  SessionState,
+  SessionFileEnvelope,
+  CreateSessionServiceOpts,
 } from './types'
 
 export {
