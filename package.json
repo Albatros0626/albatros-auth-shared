@@ -1,6 +1,6 @@
 {
   "name": "@albatros/auth-shared",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Shared application-level authentication, secrets vault and session sync for Albatros desktop apps (Electron).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

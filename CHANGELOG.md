@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-05-01
+
+### Fixed
+- `sessionService.watch()` could miss cross-app session updates on Windows.
+  The previous implementation filtered events by `filename === 'session.bin'`,
+  but `fs.watch` on Windows is unreliable for filename reporting:
+  - filename can be `null`
+  - the rename event may report the source filename (the random tmp suffix
+    introduced in v1.1.1) rather than the destination
+  - Windows can fire double events on rename
+  Together this meant Cadence/Candidate Manager could stay locked even after
+  Prospector wrote the session — symptom: "another app shows LockPage while
+  the unlocker shows the dashboard".
+
+  Fix: the watch now listens to ANY change in the shared dir, debounces, and
+  de-dupes by content snapshot before invoking the callback. Spurious tmp
+  events get absorbed by the debounce + content comparison; real session
+  changes always propagate.
+
+### Tests
+- All 229 tests still pass with the looser filter — the existing watch
+  tests (debounce, single callback per burst, propagation between
+  instances) cover the new behaviour without changes.
+
 ## [1.1.1] - 2026-05-01
 
 ### Fixed

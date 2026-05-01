@@ -135,25 +135,37 @@ function createSessionService(opts) {
         watch(cb) {
             let debounceTimer = null;
             let watcher = null;
+            let lastSnapshot = null;
+            const fireDebounced = () => {
+                if (debounceTimer)
+                    clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    debounceTimer = null;
+                    try {
+                        const state = readContent();
+                        // De-dupe: only invoke the callback when the file content has
+                        // actually changed since the last snapshot. fs.watch can fire
+                        // many spurious events (per-pid tmp files, double-events on
+                        // Windows rename, etc.) — content comparison filters those out.
+                        const snapshot = state ? JSON.stringify(state) : null;
+                        if (snapshot === lastSnapshot)
+                            return;
+                        lastSnapshot = snapshot;
+                        cb(state ? deriveState(state) : null);
+                    }
+                    catch (err) {
+                        // eslint-disable-next-line no-console
+                        console.error('[session] watch callback failed:', err);
+                    }
+                }, watchDebounceMs);
+            };
             try {
                 ensureDir();
-                watcher = (0, fs_1.watch)(sharedDir, (_eventType, filename) => {
-                    if (filename !== exports.SESSION_FILENAME)
-                        return;
-                    if (debounceTimer)
-                        clearTimeout(debounceTimer);
-                    debounceTimer = setTimeout(() => {
-                        debounceTimer = null;
-                        try {
-                            const state = readContent();
-                            cb(state ? deriveState(state) : null);
-                        }
-                        catch (err) {
-                            // eslint-disable-next-line no-console
-                            console.error('[session] watch callback failed:', err);
-                        }
-                    }, watchDebounceMs);
-                });
+                // Listen to ANY change in the shared dir. Filtering by filename is
+                // unreliable on Windows (filename can be null, the tmp name, or
+                // session.bin depending on the rename event side). Debounce + content
+                // comparison keeps the callback noise-free without missing events.
+                watcher = (0, fs_1.watch)(sharedDir, () => fireDebounced());
             }
             catch (err) {
                 // eslint-disable-next-line no-console
