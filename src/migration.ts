@@ -164,7 +164,9 @@ export function migrateLocalAuthToShared(opts: MigrateLocalAuthToSharedOpts): Mi
     }
   }
 
-  const tmp = `${sharedVaultPath}.tmp`
+  // Per-writer tmp suffix so concurrent migration runs (different apps booting
+  // simultaneously) don't trip over each other's rename of a shared tmp path.
+  const tmp = `${sharedVaultPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
   try {
     writeFileSync(tmp, content, { mode: 0o600 })
     renameSync(tmp, sharedVaultPath)

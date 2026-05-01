@@ -1,4 +1,4 @@
-export const VERSION = '1.1.0' as const
+export const VERSION = '1.1.1' as const
 
 export {
   createAuthService,

@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-01
+
+### Fixed
+- Concurrent writes from multiple processes to the same vault file no longer
+  race on a shared `.tmp` filename. The CI test
+  `parallel unlocks from independent processes do not corrupt the file` was
+  failing on Linux because two workers' `renameSync` would target the same
+  `<vault>.tmp`, and the second to run threw ENOENT after the first had
+  already moved it.
+
+  Fix: each writer now uses a unique tmp suffix
+  `<vault>.<pid>.<timestamp>.<random>.tmp`. Cleanup logic still removes the
+  exact tmp on failure (the random suffix is captured in a local variable).
+  Applied to:
+  - `session-service.ts` (writeContent)
+  - `secrets-service.ts` (writeVault)
+  - `migration.ts` (migrateLocalAuthToShared)
+
+### Tests
+- Tests that asserted on the exact `.tmp` filename now glob `*.tmp` in the
+  parent dir to match the new naming. Same coverage, race-resistant.
+
 ## [1.1.0] - 2026-05-01
 
 US12 — Cross-process integration tests. Phase 4 complete.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, unlinkSync, readdirSync } from 'fs'
 import path from 'path'
 import { tmpdir } from 'os'
 import {
@@ -64,12 +64,18 @@ beforeEach(() => {
   vaultPath = path.join(TEST_DIR, `secrets-${testCounter}.vault`)
 })
 
+function tmpLeftovers(): string[] {
+  if (!existsSync(TEST_DIR)) return []
+  return readdirSync(TEST_DIR).filter((f) => f.endsWith('.tmp'))
+}
+
 afterEach(() => {
   if (existsSync(vaultPath)) {
     try { unlinkSync(vaultPath) } catch { /* ignore */ }
   }
-  if (existsSync(`${vaultPath}.tmp`)) {
-    try { unlinkSync(`${vaultPath}.tmp`) } catch { /* ignore */ }
+  // Clean up any leftover .tmp files from per-writer tmp suffixes
+  for (const f of tmpLeftovers()) {
+    try { unlinkSync(path.join(TEST_DIR, f)) } catch { /* ignore */ }
   }
 })
 
@@ -407,7 +413,7 @@ describe('atomic write', () => {
   it('cleans up tmp file when rename succeeds', () => {
     const { svc } = buildService()
     svc.setSecret('ai.apiKey', 'val')
-    expect(existsSync(`${vaultPath}.tmp`)).toBe(false)
+    expect(tmpLeftovers()).toEqual([])
   })
 
   it('does not corrupt existing vault on encrypt failure', () => {

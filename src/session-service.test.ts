@@ -6,6 +6,7 @@ import {
   readFileSync,
   writeFileSync,
   unlinkSync,
+  readdirSync,
 } from 'fs'
 import path from 'path'
 import { tmpdir } from 'os'
@@ -466,11 +467,16 @@ describe('watch', () => {
 // Atomic write
 // =============================================================================
 
+function tmpLeftovers(): string[] {
+  if (!existsSync(sharedDir)) return []
+  return readdirSync(sharedDir).filter((f) => f.endsWith('.tmp'))
+}
+
 describe('atomic write', () => {
   it('cleans up tmp file when rename succeeds', () => {
     const { svc } = buildService()
     svc.recordUnlock({ lockTimeoutMinutes: 10 })
-    expect(existsSync(`${sessionFile}.tmp`)).toBe(false)
+    expect(tmpLeftovers()).toEqual([])
   })
 
   it('does not corrupt existing session on encrypt failure', () => {
@@ -489,7 +495,7 @@ describe('atomic write', () => {
     const { svc, safe } = buildService()
     safe.encryptShouldThrow = true
     expect(() => svc.recordUnlock({ lockTimeoutMinutes: 5 })).toThrow()
-    expect(existsSync(`${sessionFile}.tmp`)).toBe(false)
+    expect(tmpLeftovers()).toEqual([])
   })
 })
 

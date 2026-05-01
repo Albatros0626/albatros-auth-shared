@@ -97,7 +97,10 @@ export function createSessionService(opts: CreateSessionServiceOpts): SessionSer
       version: SESSION_FILE_VERSION,
       ciphertext: cipher.toString('base64'),
     }
-    const tmp = `${filePath}.tmp`
+    // Per-writer tmp suffix so concurrent processes don't trip over each other:
+    // without this, two workers writing simultaneously share `session.bin.tmp` and
+    // the second's rename throws ENOENT after the first has already moved it.
+    const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
     try {
       writeFileSync(tmp, JSON.stringify(envelope), { mode: 0o600 })
       renameSync(tmp, filePath)

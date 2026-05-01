@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync, spawn } from 'child_process'
 import path from 'path'
-import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, readFileSync, readdirSync } from 'fs'
 import { tmpdir } from 'os'
 
 const WORKER = path.join(__dirname, 'worker.cjs')
@@ -127,10 +127,11 @@ describe('multi-process session sync', () => {
     expect(first.sessionToken).not.toBe(second.sessionToken)
   })
 
-  it('atomic write: tmp file is cleaned up after unlock', () => {
+  it('atomic write: no tmp leftovers after unlock', () => {
     runWorker('app-a', 'unlock', '10')
     expect(existsSync(path.join(sharedDir, 'session.bin'))).toBe(true)
-    expect(existsSync(path.join(sharedDir, 'session.bin.tmp'))).toBe(false)
+    const tmpFiles = readdirSync(sharedDir).filter((f) => f.endsWith('.tmp'))
+    expect(tmpFiles).toEqual([])
   })
 
   it('file format: session.bin is a versioned envelope with base64 ciphertext', () => {

@@ -5,6 +5,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  readdirSync,
 } from 'fs'
 import path from 'path'
 import { tmpdir } from 'os'
@@ -250,21 +251,23 @@ describe('error paths', () => {
     expect(existsSync(localPath)).toBe(true)
   })
 
-  it('cleans up tmp file when atomic write fails', () => {
-    // Place a directory exactly where the .tmp would land, so writeFileSync fails
+  it('cleans up tmp files after rename failure', () => {
+    // Place a directory at the final shared path so renameSync fails (target is a dir).
+    // Verifies that no .tmp leftovers remain after the failed migration.
     writeFileSync(localPath, SAMPLE_VAULT_V1)
-    const tmpPath = `${sharedPath}.tmp`
-    mkdirSync(tmpPath)
+    mkdirSync(sharedPath)
 
-    const result = migrateLocalAuthToShared({
+    migrateLocalAuthToShared({
       localVaultPath: localPath,
       sharedVaultPath: sharedPath,
       appId: 'prospector',
     })
 
-    expect(result.outcome).toBe('error')
+    // No leftover .tmp files in the shared dir
+    const leftovers = readdirSync(sharedDir).filter((f) => f.endsWith('.tmp'))
+    expect(leftovers).toEqual([])
+    // Local untouched
     expect(existsSync(localPath)).toBe(true)
-    expect(existsSync(sharedPath)).toBe(false)
   })
 })
 

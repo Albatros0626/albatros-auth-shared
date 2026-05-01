@@ -29,7 +29,9 @@ function createSecretsService(opts) {
         return parsed;
     }
     function writeVault(vault) {
-        const tmp = `${vaultPath}.tmp`;
+        // Per-writer tmp suffix to avoid renameSync races between concurrent writers
+        // (see session-service writeContent for the same rationale).
+        const tmp = `${vaultPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
         const content = JSON.stringify(vault, null, 2);
         try {
             (0, fs_1.writeFileSync)(tmp, content, { mode: 0o600 });
