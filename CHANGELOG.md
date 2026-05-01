@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-01
+
+US4 — Auth state + guarded IPC handle ported.
+
+### Added
+- `createAuthState()` factory:
+  - `isUnlocked()`, `setUnlocked(v)`
+  - `onUnlockChange(listener)` — subscribe to unlock/lock transitions; returns an unsubscribe function
+  - listener errors are caught and logged so one bad listener does not break others
+  - state is per-instance (two `createAuthState()` calls produce isolated states)
+- `createGuardedHandle({ ipcMain, authState })` factory:
+  - returns a `guardedHandle(channel, listener)` function
+  - rejects calls when locked with `NOT_UNLOCKED_ERROR` (`{ success: false, error: { code: 'NOT_UNLOCKED', message: ... } }`)
+  - `ipcMain` is dependency-injected (interface `IpcMainLike`) — no Electron coupling, easy to mock
+  - re-locking between registration and invocation is checked at call time (correct guard)
+- Exported types: `AuthState`, `UnlockListener`, `GuardedHandle`, `GuardedError`, `IpcMainLike`, `IpcHandler`, `CreateGuardedHandleOpts`
+- Exported constant: `NOT_UNLOCKED_ERROR`
+
+### Tests
+- 9 auth-state tests (initial state, transitions, no-op when unchanged, multi-listener, unsubscribe, throwing listener isolation, multi-instance independence)
+- 8 guarded-handle tests (registration, locked rejection, unlocked forwarding, async results, listener throw, lock-after-register, multi-channel)
+- 100% coverage on both new files
+- Total package coverage: 99.27% statements, 96.91% branches
+
 ## [0.3.0] - 2026-05-01
 
 US3 — Secrets service ported.

@@ -1,4 +1,4 @@
-export const VERSION = '0.3.0' as const
+export const VERSION = '0.4.0' as const
 
 export {
   createAuthService,
@@ -27,6 +27,21 @@ export {
 } from './secrets-service'
 
 export type { SecretsService } from './secrets-service'
+
+export { createAuthState } from './auth-state'
+export type { AuthState, UnlockListener } from './auth-state'
+
+export {
+  createGuardedHandle,
+  NOT_UNLOCKED_ERROR,
+} from './guarded-handle'
+export type {
+  GuardedHandle,
+  GuardedError,
+  CreateGuardedHandleOpts,
+  IpcMainLike,
+  IpcHandler,
+} from './guarded-handle'
 
 export {
   RECOVERY_QUESTIONS,

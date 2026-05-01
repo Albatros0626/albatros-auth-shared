@@ -11,7 +11,7 @@ import {
 
 describe('package public API', () => {
   it('exports VERSION constant', () => {
-    expect(VERSION).toBe('0.3.0')
+    expect(VERSION).toBe('0.4.0')
   })
 
   it('exports auth-service factory', () => {
