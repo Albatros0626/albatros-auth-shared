@@ -1,0 +1,49 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['20']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm lint
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Verify dist/ is up-to-date with src/
+        # If a maintainer forgot to run `pnpm prerelease` before committing,
+        # the rebuilt dist/ will differ from the committed dist/. Fail CI.
+        shell: bash
+        run: |
+          pnpm run clean
+          pnpm run build
+          if ! git diff --quiet dist/; then
+            echo "::error::dist/ is out of sync with src/. Run 'pnpm run prerelease' before committing."
+            git diff --stat dist/
+            exit 1
+          fi

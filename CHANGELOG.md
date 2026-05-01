@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-01
+
+US8 — First stable release.
+
+### Added
+- Comprehensive README with integration examples for main process and renderer hook
+- GitHub Actions CI workflow (`.github/workflows/test.yml`):
+  - Runs lint + tests on Ubuntu + Windows on every push/PR
+  - Verifies `dist/` is in sync with `src/` (catches missing `pnpm prerelease` before commit)
+- Maintainer release workflow documented in README
+
+### Stability commitment
+This is the first stable release. From v1.0.0 onward:
+- v1.minor.patch bumps remain backwards-compatible.
+- Breaking changes are reserved for v2.0.0+ and require coordinated rollout across all consumer apps.
+- The vault format `schemaCompat` field provides forward-compat reads for non-breaking minor changes.
+
+No code changes vs v0.7.0 — same surface, same behaviour, same 219 tests, 98.35% statements / 95.22% branches coverage.
+
+Consumer apps may now adopt: `pnpm add github:Albatros0626/albatros-auth-shared#v1.0.0`.
+
 ## [0.7.0] - 2026-05-01
 
 US7 — Legacy → shared migration. Phase 2 complete.
