@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.BACKUP_SUFFIX = exports.appendMigrationLog = exports.detectMigrationConflict = exports.migrateLocalAuthToShared = exports.DEFAULT_IDLE_POLL_MS = exports.createIdleWatcher = exports.createActivityTracker = exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = exports.createSessionService = exports.NOT_UNLOCKED_ERROR = exports.createGuardedHandle = exports.createAuthState = exports.SECRETS_VAULT_VERSION = exports.anonymizeKeyForLog = exports.createSecretsService = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
-exports.VERSION = '1.0.1';
+exports.VERSION = '1.1.0';
 var auth_service_1 = require("./auth-service");
 Object.defineProperty(exports, "createAuthService", { enumerable: true, get: function () { return auth_service_1.createAuthService; } });
 Object.defineProperty(exports, "validateCode", { enumerable: true, get: function () { return auth_service_1.validateCode; } });

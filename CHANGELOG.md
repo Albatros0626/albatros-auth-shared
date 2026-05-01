@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-01
+
+US12 — Cross-process integration tests. Phase 4 complete.
+
+### Added
+- `test/integration/multi-app.test.ts` — 10 tests that spawn the package
+  as a fresh Node process via `child_process.execFileSync` to validate
+  the file-based session handoff under genuine process isolation.
+- `test/integration/worker.cjs` — small CJS worker invoked by the tests:
+  takes a command on argv (`unlock`, `lock`, `activity`, `read`),
+  performs it on a real `sessionService` instance, prints the result.
+
+### Scenarios covered (cross-process)
+- App B reads session written by app A
+- Lock by app A is visible to app B
+- App B observes `lastActivityAt` update from app A
+- Multiple unlocks: last writer wins, `unlockerAppId` reflects who wrote last
+- Read on missing session returns null
+- Re-unlock after lock produces a fresh valid session
+- Session token rotates on each unlock (replay protection)
+- Atomic write cleans up `.tmp` after success
+- File format: versioned envelope with base64 ciphertext, parseable
+- 5 concurrent unlock workers do not corrupt the file (last-write-wins)
+
+### Verified
+- 229 tests total (219 from earlier US + 10 new), all passing
+- Same-process scenarios stay covered by `src/session-service.test.ts`;
+  the new tests focus on the file-as-IPC contract that consumer apps rely on
+- Phase 4 of the auth-shared plan is complete: package, distribution, and
+  adoption in Prospector + Cadence + Candidate Manager are all done
+
 ## [1.0.1] - 2026-05-01
 
 ### Fixed
