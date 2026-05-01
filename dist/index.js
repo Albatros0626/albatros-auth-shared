@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = exports.createSessionService = exports.NOT_UNLOCKED_ERROR = exports.createGuardedHandle = exports.createAuthState = exports.SECRETS_VAULT_VERSION = exports.anonymizeKeyForLog = exports.createSecretsService = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
-exports.VERSION = '0.5.0';
+exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.DEFAULT_IDLE_POLL_MS = exports.createIdleWatcher = exports.createActivityTracker = exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = exports.createSessionService = exports.NOT_UNLOCKED_ERROR = exports.createGuardedHandle = exports.createAuthState = exports.SECRETS_VAULT_VERSION = exports.anonymizeKeyForLog = exports.createSecretsService = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
+exports.VERSION = '0.6.0';
 var auth_service_1 = require("./auth-service");
 Object.defineProperty(exports, "createAuthService", { enumerable: true, get: function () { return auth_service_1.createAuthService; } });
 Object.defineProperty(exports, "validateCode", { enumerable: true, get: function () { return auth_service_1.validateCode; } });
@@ -33,6 +33,11 @@ Object.defineProperty(exports, "SESSION_FILENAME", { enumerable: true, get: func
 Object.defineProperty(exports, "SESSION_FILE_VERSION", { enumerable: true, get: function () { return session_service_1.SESSION_FILE_VERSION; } });
 Object.defineProperty(exports, "DEFAULT_ACTIVITY_THROTTLE_MS", { enumerable: true, get: function () { return session_service_1.DEFAULT_ACTIVITY_THROTTLE_MS; } });
 Object.defineProperty(exports, "DEFAULT_WATCH_DEBOUNCE_MS", { enumerable: true, get: function () { return session_service_1.DEFAULT_WATCH_DEBOUNCE_MS; } });
+var activity_tracker_1 = require("./activity-tracker");
+Object.defineProperty(exports, "createActivityTracker", { enumerable: true, get: function () { return activity_tracker_1.createActivityTracker; } });
+var idle_watcher_1 = require("./idle-watcher");
+Object.defineProperty(exports, "createIdleWatcher", { enumerable: true, get: function () { return idle_watcher_1.createIdleWatcher; } });
+Object.defineProperty(exports, "DEFAULT_IDLE_POLL_MS", { enumerable: true, get: function () { return idle_watcher_1.DEFAULT_IDLE_POLL_MS; } });
 var recovery_questions_1 = require("./recovery-questions");
 Object.defineProperty(exports, "RECOVERY_QUESTIONS", { enumerable: true, get: function () { return recovery_questions_1.RECOVERY_QUESTIONS; } });
 Object.defineProperty(exports, "CUSTOM_QUESTION_MIN_LENGTH", { enumerable: true, get: function () { return recovery_questions_1.CUSTOM_QUESTION_MIN_LENGTH; } });

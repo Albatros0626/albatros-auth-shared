@@ -1,4 +1,4 @@
-export const VERSION = '0.5.0' as const
+export const VERSION = '0.6.0' as const
 
 export {
   createAuthService,
@@ -52,6 +52,12 @@ export {
 } from './session-service'
 
 export type { SessionService } from './session-service'
+
+export { createActivityTracker } from './activity-tracker'
+export type { ActivityTracker, CreateActivityTrackerOpts } from './activity-tracker'
+
+export { createIdleWatcher, DEFAULT_IDLE_POLL_MS } from './idle-watcher'
+export type { IdleWatcher, CreateIdleWatcherOpts } from './idle-watcher'
 
 export {
   RECOVERY_QUESTIONS,

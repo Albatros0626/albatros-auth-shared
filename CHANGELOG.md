@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-01
+
+US6 — Auto-lock primitives.
+
+### Added
+- `createActivityTracker({ timeoutMs, onIdle })` — env-agnostic idle detector:
+  - call `recordActivity()` on every user input to reset the timer
+  - fires `onIdle()` once after `timeoutMs` of inactivity
+  - `start()` / `stop()` for lifecycle control; `timeoutMs: 0` disables idle detection
+  - usable in main process or renderer (consumers wire DOM listeners themselves)
+- `createIdleWatcher({ sessionService, onLock, pollMs? })` — main-process watcher:
+  - polls `sessionService.read()` (default every 5s) to detect time-based expiration
+  - listens to `sessionService.watch()` for instant cross-app lock notifications
+  - fires `onLock()` once per `start()` cycle (re-arm after a fresh unlock)
+  - immediate check at start handles already-expired sessions
+- Both isolate listener errors (caught + logged, no crash).
+
+### Design notes
+- No React peer dependency. Each app writes a ~15-line React hook around `createActivityTracker` (mounts DOM listeners in `useEffect`, calls `recordActivity` on each). Keeps the package framework-free.
+- `IdleWatcher` does NOT track activity itself — that's the renderer's job via `sessionService.recordActivity()` over IPC. The watcher only reacts to expiration / external locks.
+
+### Tests
+- 9 activity-tracker tests + 11 idle-watcher tests
+- 100% line/statement/function coverage on both files
+- Total: 196 tests, 98.97% statements / 95.08% branches across the package
+
 ## [0.5.0] - 2026-05-01
 
 US5 — Session sync between apps (Phase 2 begins).
