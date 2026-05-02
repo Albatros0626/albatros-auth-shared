@@ -134,16 +134,17 @@ describe('multi-process session sync', () => {
     expect(tmpFiles).toEqual([])
   })
 
-  it('file format: session.bin is a versioned envelope with base64 ciphertext', () => {
+  it('file format: session.bin is a versioned plain JSON document (v2)', () => {
     runWorker('app-a', 'unlock', '10')
     const raw = readFileSync(path.join(sharedDir, 'session.bin'), 'utf-8')
-    const envelope = JSON.parse(raw) as { version: number; ciphertext: string }
-    expect(envelope.version).toBe(1)
-    expect(typeof envelope.ciphertext).toBe('string')
-    expect(envelope.ciphertext.length).toBeGreaterThan(0)
-    // The mock encrypts with "ENC::" prefix; assert it round-trips through base64
-    const decoded = Buffer.from(envelope.ciphertext, 'base64').toString('utf-8')
-    expect(decoded.startsWith('ENC::')).toBe(true)
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    expect(parsed.version).toBe(2)
+    // v2: fields are at the top level, no envelope/ciphertext
+    expect(typeof parsed.unlockerAppId).toBe('string')
+    expect(typeof parsed.lastActivityAt).toBe('string')
+    expect(typeof parsed.sessionToken).toBe('string')
+    // Plaintext: cross-app readability is the whole point of v2
+    expect(raw).toContain('app-a')
   })
 
   it('parallel unlocks from independent processes do not corrupt the file', async () => {

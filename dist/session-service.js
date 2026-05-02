@@ -3,13 +3,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = void 0;
+exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSIONS_SUPPORTED = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = void 0;
 exports.createSessionService = createSessionService;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const crypto_1 = require("crypto");
 exports.SESSION_FILENAME = 'session.bin';
-exports.SESSION_FILE_VERSION = 1;
+/**
+ * v1: DPAPI-encrypted envelope (`{ version: 1, ciphertext }`). Could not be
+ *     decrypted across apps because Electron's safeStorage uses a Master Key
+ *     stored per-app in `userData/Local State`.
+ * v2: Plain JSON (`{ version: 2, ...content }`). The session file lives in
+ *     `%LOCALAPPDATA%` (per-user) with file permissions restricting access
+ *     to the owner. Content is not sensitive (timestamps + opaque token +
+ *     appId), so OS-level isolation is sufficient and the cross-app sharing
+ *     becomes reliable.
+ */
+exports.SESSION_FILE_VERSION = 2;
+exports.SESSION_FILE_VERSIONS_SUPPORTED = [2];
 exports.DEFAULT_ACTIVITY_THROTTLE_MS = 10_000;
 exports.DEFAULT_WATCH_DEBOUNCE_MS = 100;
 function nowIso() {
@@ -31,7 +42,8 @@ function deriveState(content) {
     };
 }
 function createSessionService(opts) {
-    const { sharedDir, appId, safeStorage, activityThrottleMs = exports.DEFAULT_ACTIVITY_THROTTLE_MS, watchDebounceMs = exports.DEFAULT_WATCH_DEBOUNCE_MS, } = opts;
+    const { sharedDir, appId, activityThrottleMs = exports.DEFAULT_ACTIVITY_THROTTLE_MS, watchDebounceMs = exports.DEFAULT_WATCH_DEBOUNCE_MS, } = opts;
+    // opts.safeStorage is deprecated and intentionally ignored — see CreateSessionServiceOpts.
     const filePath = path_1.default.join(sharedDir, exports.SESSION_FILENAME);
     let activityTimer = null;
     function ensureDir() {
@@ -44,12 +56,15 @@ function createSessionService(opts) {
             return null;
         try {
             const raw = (0, fs_1.readFileSync)(filePath, 'utf-8');
-            const envelope = JSON.parse(raw);
-            if (envelope.version !== exports.SESSION_FILE_VERSION)
+            const parsed = JSON.parse(raw);
+            if (!exports.SESSION_FILE_VERSIONS_SUPPORTED.includes(parsed.version)) {
+                // v1 used DPAPI; can no longer be decrypted reliably across apps.
+                // Treat as no session — next unlock will write a fresh v2 file.
                 return null;
-            const cipher = Buffer.from(envelope.ciphertext, 'base64');
-            const json = safeStorage.decryptString(cipher);
-            return JSON.parse(json);
+            }
+            // v2: plain JSON, fields are at the top level alongside `version`.
+            const { version: _v, ...content } = parsed;
+            return content;
         }
         catch (err) {
             // eslint-disable-next-line no-console
@@ -59,18 +74,13 @@ function createSessionService(opts) {
     }
     function writeContent(content) {
         ensureDir();
-        const json = JSON.stringify(content);
-        const cipher = safeStorage.encryptString(json);
-        const envelope = {
-            version: exports.SESSION_FILE_VERSION,
-            ciphertext: cipher.toString('base64'),
-        };
+        const payload = { version: exports.SESSION_FILE_VERSION, ...content };
         // Per-writer tmp suffix so concurrent processes don't trip over each other:
         // without this, two workers writing simultaneously share `session.bin.tmp` and
         // the second's rename throws ENOENT after the first has already moved it.
         const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
         try {
-            (0, fs_1.writeFileSync)(tmp, JSON.stringify(envelope), { mode: 0o600 });
+            (0, fs_1.writeFileSync)(tmp, JSON.stringify(payload), { mode: 0o600 });
             (0, fs_1.renameSync)(tmp, filePath);
         }
         catch (err) {

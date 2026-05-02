@@ -19,7 +19,18 @@ import type {
 } from './types'
 
 export const SESSION_FILENAME = 'session.bin'
-export const SESSION_FILE_VERSION = 1
+/**
+ * v1: DPAPI-encrypted envelope (`{ version: 1, ciphertext }`). Could not be
+ *     decrypted across apps because Electron's safeStorage uses a Master Key
+ *     stored per-app in `userData/Local State`.
+ * v2: Plain JSON (`{ version: 2, ...content }`). The session file lives in
+ *     `%LOCALAPPDATA%` (per-user) with file permissions restricting access
+ *     to the owner. Content is not sensitive (timestamps + opaque token +
+ *     appId), so OS-level isolation is sufficient and the cross-app sharing
+ *     becomes reliable.
+ */
+export const SESSION_FILE_VERSION = 2
+export const SESSION_FILE_VERSIONS_SUPPORTED: readonly number[] = [2]
 export const DEFAULT_ACTIVITY_THROTTLE_MS = 10_000
 export const DEFAULT_WATCH_DEBOUNCE_MS = 100
 
@@ -59,10 +70,10 @@ export function createSessionService(opts: CreateSessionServiceOpts): SessionSer
   const {
     sharedDir,
     appId,
-    safeStorage,
     activityThrottleMs = DEFAULT_ACTIVITY_THROTTLE_MS,
     watchDebounceMs = DEFAULT_WATCH_DEBOUNCE_MS,
   } = opts
+  // opts.safeStorage is deprecated and intentionally ignored — see CreateSessionServiceOpts.
 
   const filePath = path.join(sharedDir, SESSION_FILENAME)
   let activityTimer: NodeJS.Timeout | null = null
@@ -77,11 +88,15 @@ export function createSessionService(opts: CreateSessionServiceOpts): SessionSer
     if (!existsSync(filePath)) return null
     try {
       const raw = readFileSync(filePath, 'utf-8')
-      const envelope = JSON.parse(raw) as SessionFileEnvelope
-      if (envelope.version !== SESSION_FILE_VERSION) return null
-      const cipher = Buffer.from(envelope.ciphertext, 'base64')
-      const json = safeStorage.decryptString(cipher)
-      return JSON.parse(json) as SessionContent
+      const parsed = JSON.parse(raw) as { version: number } & Partial<SessionContent>
+      if (!SESSION_FILE_VERSIONS_SUPPORTED.includes(parsed.version)) {
+        // v1 used DPAPI; can no longer be decrypted reliably across apps.
+        // Treat as no session — next unlock will write a fresh v2 file.
+        return null
+      }
+      // v2: plain JSON, fields are at the top level alongside `version`.
+      const { version: _v, ...content } = parsed
+      return content as SessionContent
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[session] Failed to read session file:', err)
@@ -91,18 +106,13 @@ export function createSessionService(opts: CreateSessionServiceOpts): SessionSer
 
   function writeContent(content: SessionContent): void {
     ensureDir()
-    const json = JSON.stringify(content)
-    const cipher = safeStorage.encryptString(json)
-    const envelope: SessionFileEnvelope = {
-      version: SESSION_FILE_VERSION,
-      ciphertext: cipher.toString('base64'),
-    }
+    const payload = { version: SESSION_FILE_VERSION, ...content }
     // Per-writer tmp suffix so concurrent processes don't trip over each other:
     // without this, two workers writing simultaneously share `session.bin.tmp` and
     // the second's rename throws ENOENT after the first has already moved it.
     const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
     try {
-      writeFileSync(tmp, JSON.stringify(envelope), { mode: 0o600 })
+      writeFileSync(tmp, JSON.stringify(payload), { mode: 0o600 })
       renameSync(tmp, filePath)
     } catch (err) {
       try { if (existsSync(tmp)) unlinkSync(tmp) } catch { /* ignore */ }

@@ -87,7 +87,14 @@ export interface SessionFileEnvelope {
 export interface CreateSessionServiceOpts {
     sharedDir: string;
     appId: string;
-    safeStorage: SafeStorageLike;
+    /**
+     * @deprecated since v1.1.3. session.bin is no longer DPAPI-encrypted because
+     * Electron's safeStorage Master Key is per-app and cannot decrypt files
+     * written by another app. The session file is now plain JSON in
+     * %LOCALAPPDATA% (per-user, restricted by file permissions). Accepted for
+     * backwards compat but unused; pass `undefined` or omit.
+     */
+    safeStorage?: SafeStorageLike;
     /** Activity write throttle in ms (default 10_000). Test-only override. */
     activityThrottleMs?: number;
     /** Watch event debounce in ms (default 100). Test-only override. */

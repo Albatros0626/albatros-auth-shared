@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-05-02
+
+### Fixed (critical)
+- `session.bin` is no longer DPAPI-encrypted. Each Electron app's `safeStorage`
+  uses a Master Key stored in its own `userData/Local State` — this means
+  app A could not decrypt a session.bin written by app B, defeating the whole
+  point of cross-app session sharing. Symptom: an app starting after another
+  Albatros app already unlocked stayed on LockPage; a `lock` from one app did
+  not propagate either.
+
+  Fix: `session.bin` is now a plain-JSON document with `{ version: 2, ...content }`
+  at the top level. The file lives in `%LOCALAPPDATA%` (per-user, restricted
+  by file permissions) and contains only non-sensitive data: ISO timestamps,
+  the lock-timeout setting, the unlocker app's id, and an opaque random
+  session token. The actual user credentials remain in `auth.vault` (PBKDF2
+  hashes, not reversible without brute-forcing the password).
+
+### Changed
+- Format: `session.bin` v1 (DPAPI envelope) → v2 (plain JSON). Reading a v1
+  file returns `null` and a fresh v2 file is written on the next unlock —
+  no user-visible disruption since session files are short-lived.
+- API: `CreateSessionServiceOpts.safeStorage` is now optional and ignored
+  (deprecated but accepted for backwards compat). Existing consumers that
+  pass it continue to work without changes.
+
+### Tests
+- 228 tests pass (1 retired: "does not store payload as plaintext" no longer
+  applies). Tests that tampered with the v1 ciphertext to provoke
+  expiration/etc. now operate directly on the plain-JSON file. The integration
+  test that verified the file format was updated to assert v2 plain JSON.
+
 ## [1.1.2] - 2026-05-01
 
 ### Fixed
