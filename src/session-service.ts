@@ -39,6 +39,13 @@ export interface SessionService {
   recordUnlock(opts: { lockTimeoutMinutes: number }): SessionState
   recordLock(): void
   recordActivity(): void
+  /**
+   * Updates the active session's `lockTimeoutMinutes` in place. Returns true
+   * if the file was rewritten (i.e. an active session existed and the value
+   * changed), false otherwise. Other apps watching the file will pick up the
+   * new value on their next read.
+   */
+  updateLockTimeoutMinutes(minutes: number): boolean
   watch(cb: (state: SessionState | null) => void): () => void
   /** @internal Flush any pending throttled writes. Test-only. */
   __flushPendingForTests(): void
@@ -157,6 +164,15 @@ export function createSessionService(opts: CreateSessionServiceOpts): SessionSer
       if (!content) return
       content.lockedAt = nowIso()
       writeContent(content)
+    },
+
+    updateLockTimeoutMinutes(minutes: number): boolean {
+      const content = readContent()
+      if (!content) return false
+      if (content.lockTimeoutMinutes === minutes) return false
+      content.lockTimeoutMinutes = minutes
+      writeContent(content)
+      return true
     },
 
     recordActivity(): void {

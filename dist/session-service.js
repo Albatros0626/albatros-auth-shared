@@ -128,6 +128,16 @@ function createSessionService(opts) {
             content.lockedAt = nowIso();
             writeContent(content);
         },
+        updateLockTimeoutMinutes(minutes) {
+            const content = readContent();
+            if (!content)
+                return false;
+            if (content.lockTimeoutMinutes === minutes)
+                return false;
+            content.lockTimeoutMinutes = minutes;
+            writeContent(content);
+            return true;
+        },
         recordActivity() {
             // Leading-skip + trailing-write throttle: schedule a single write at the
             // end of the throttle window. Captures bursts of events with one write.

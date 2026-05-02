@@ -235,6 +235,49 @@ describe('recordLock', () => {
   })
 })
 
+describe('updateLockTimeoutMinutes', () => {
+  it('rewrites session.bin with the new timeout', () => {
+    const { svc } = buildService()
+    svc.recordUnlock({ lockTimeoutMinutes: 10 })
+
+    const changed = svc.updateLockTimeoutMinutes(30)
+    expect(changed).toBe(true)
+    expect(svc.read()!.lockTimeoutMinutes).toBe(30)
+  })
+
+  it('preserves session token + timestamps', () => {
+    const { svc } = buildService()
+    const before = svc.recordUnlock({ lockTimeoutMinutes: 10 })
+    svc.updateLockTimeoutMinutes(30)
+    const after = svc.read()!
+    expect(after.sessionToken).toBe(before.sessionToken)
+    expect(after.unlockedAt).toBe(before.unlockedAt)
+    expect(after.unlockerAppId).toBe(before.unlockerAppId)
+  })
+
+  it('returns false when no session exists', () => {
+    const { svc } = buildService()
+    expect(svc.updateLockTimeoutMinutes(30)).toBe(false)
+  })
+
+  it('returns false when value is unchanged (idempotent no-op)', () => {
+    const { svc } = buildService()
+    svc.recordUnlock({ lockTimeoutMinutes: 10 })
+    expect(svc.updateLockTimeoutMinutes(10)).toBe(false)
+  })
+
+  it('cross-instance: app B sees the new timeout written by app A', () => {
+    const safe = makeMockSafeStorage()
+    const svcA = createSessionService({ sharedDir, appId: 'app-a', safeStorage: safe })
+    const svcB = createSessionService({ sharedDir, appId: 'app-b', safeStorage: safe })
+
+    svcA.recordUnlock({ lockTimeoutMinutes: 10 })
+    svcA.updateLockTimeoutMinutes(45)
+
+    expect(svcB.read()!.lockTimeoutMinutes).toBe(45)
+  })
+})
+
 // =============================================================================
 // recordActivity (throttle)
 // =============================================================================

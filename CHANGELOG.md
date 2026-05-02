@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-05-02
+
+### Added
+- `sessionService.updateLockTimeoutMinutes(minutes)`: rewrites the active
+  session's `lockTimeoutMinutes` in place (without touching `unlockedAt`,
+  `sessionToken`, etc.). Returns true if the file was rewritten, false if
+  no session existed or the value was unchanged.
+  Use case: when a user changes the auto-lock period in Settings, the
+  consuming app's IPC handler can call both `authService.setLockTimeoutMinutes`
+  (persists to `auth.vault`) AND `sessionService.updateLockTimeoutMinutes`
+  (propagates the change to all running apps via the watched session.bin
+  without waiting for the next unlock).
+
+### Tests
+- 5 new tests covering the new method (rewrite, preservation of token +
+  timestamps, no-op when no session, no-op when unchanged, cross-instance
+  propagation). 233 tests pass.
+
 ## [1.1.3] - 2026-05-02
 
 ### Fixed (critical)
