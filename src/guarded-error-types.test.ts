@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { isGuardedError, type GuardedError } from './guarded-error-types'
-import { NOT_UNLOCKED_ERROR } from './guarded-handle'
+import { isGuardedError, isNotUnlockedError, type GuardedError } from './guarded-error-types'
+import { NOT_UNLOCKED_ERROR, NotUnlockedError } from './guarded-handle'
 
 describe('isGuardedError', () => {
   it('matches the canonical NOT_UNLOCKED_ERROR constant', () => {
@@ -49,5 +49,31 @@ describe('isGuardedError', () => {
     } else {
       throw new Error('guard should have matched')
     }
+  })
+})
+
+describe('isNotUnlockedError', () => {
+  it('matches a NotUnlockedError instance', () => {
+    expect(isNotUnlockedError(new NotUnlockedError())).toBe(true)
+  })
+
+  it('matches an Error with name === "NotUnlockedError" (post-IPC serialization)', () => {
+    // Electron preserves `name` across IPC but the prototype chain is lost,
+    // so the renderer-side check relies on `name` rather than `instanceof`.
+    const err = new Error('locked')
+    err.name = 'NotUnlockedError'
+    expect(isNotUnlockedError(err)).toBe(true)
+  })
+
+  it('rejects other Error subtypes', () => {
+    expect(isNotUnlockedError(new Error('boom'))).toBe(false)
+    expect(isNotUnlockedError(new TypeError('bad'))).toBe(false)
+  })
+
+  it('rejects non-Error values', () => {
+    expect(isNotUnlockedError(null)).toBe(false)
+    expect(isNotUnlockedError(undefined)).toBe(false)
+    expect(isNotUnlockedError('NotUnlockedError')).toBe(false)
+    expect(isNotUnlockedError({ name: 'NotUnlockedError', message: 'x' })).toBe(false)
   })
 })

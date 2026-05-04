@@ -28,7 +28,10 @@ export type {
   ActivityEventTarget,
 } from './activity-listener'
 
-export { isGuardedError } from './guarded-error-types'
+export {
+  isGuardedError,
+  isNotUnlockedError,
+} from './guarded-error-types'
 export type { GuardedError } from './guarded-error-types'
 
 export {

@@ -36,4 +36,23 @@ export interface GuardedError {
  * this helper will become unnecessary.
  */
 export declare function isGuardedError(x: unknown): x is GuardedError;
+/**
+ * Type guard for the v2.0.0+ exception thrown by `guardedHandle` when the
+ * app is locked. Electron preserves `name` across the IPC boundary, so this
+ * works in the renderer too:
+ *
+ * ```ts
+ * try {
+ *   const result = await window.electronAPI.getContacts()
+ *   // result is the actual array — no shape check needed
+ * } catch (err) {
+ *   if (isNotUnlockedError(err)) {
+ *     // The fetch raced a lock — ignore silently; next post-unlock fetch will repopulate.
+ *     return
+ *   }
+ *   throw err
+ * }
+ * ```
+ */
+export declare function isNotUnlockedError(err: unknown): boolean;
 //# sourceMappingURL=guarded-error-types.d.ts.map

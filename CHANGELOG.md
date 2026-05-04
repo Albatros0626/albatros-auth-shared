@@ -6,6 +6,76 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-04
+
+### BREAKING CHANGE
+
+`createGuardedHandle` now **throws** a `NotUnlockedError` exception when the
+app is locked, instead of *returning* the `NOT_UNLOCKED_ERROR` envelope.
+
+#### Why
+
+The v1.x behavior caused silent data corruption in renderer stores: a fetch
+that raced a lock would resolve with the error envelope, the store's
+`try/catch` would not trigger (the promise never rejected), and the bad
+shape would be persisted as if it were the actual data — crashing the next
+render with `"X is not iterable"` / `".filter is not a function"` errors.
+
+Throwing aligns with the standard JS / Electron IPC convention (`fetch`
+rejects on error, an `ipcMain.handle` listener that throws produces a
+rejected promise on the renderer side). Existing `try/catch` blocks
+around IPC calls now work as expected without per-store shape checks.
+
+#### Migration
+
+See [docs/MIGRATION_v1_to_v2.md](docs/MIGRATION_v1_to_v2.md) for a step-by-step
+guide. Short version:
+
+```ts
+// AVANT (v1.x)
+const result = await window.electronAPI.getContacts()
+if (isGuardedError(result)) { /* handle */ return }
+// use result
+
+// APRÈS (v2.0.0)
+import { isNotUnlockedError } from '@albatros/auth-shared/browser'
+try {
+  const result = await window.electronAPI.getContacts()
+  // use result — guaranteed to be the real payload
+} catch (err) {
+  if (isNotUnlockedError(err)) return  // silent grace
+  throw err
+}
+```
+
+`NOT_UNLOCKED_ERROR` and `isGuardedError` remain exported for back-compat
+(marked `@deprecated`) — code that still references them keeps compiling.
+
+### Added
+
+- **`NotUnlockedError`** class (extends `Error`) — thrown by
+  `createGuardedHandle` instead of returning. Has `name = 'NotUnlockedError'`
+  (preserved across Electron IPC) and `code = 'NOT_UNLOCKED'`.
+- **`isNotUnlockedError(err)`** type guard exposed from both `/browser` and
+  the main entry. Recognizes both real `NotUnlockedError` instances and
+  the deserialized version received by the renderer (where `instanceof`
+  no longer works because Electron loses the prototype chain).
+
+### Tests
+
+- `guarded-handle.test.ts` (8 → 9 tests) — adapted 3 cases from
+  `equals(NOT_UNLOCKED_ERROR)` to `rejects.toThrow(NotUnlockedError)` +
+  added a new test asserting `name` and `code` are preserved.
+- `guarded-error-types.test.ts` (8 → 12 tests) — 4 new cases for
+  `isNotUnlockedError`.
+
+### Audit cross-app (T0 du PLAN_v2.0.0)
+
+Avant la release, audit sur Prospector V2 / Cadence / Candidate Manager :
+0 occurrence de `result.success === false` ou de lecture de
+`result.error.code` côté renderer. Aucun consommateur ne dépendait du
+shape de retour — la breaking change a un impact réel nul.
+
 ## [1.2.0] - 2026-05-04
 
 Production hardening pass after the Prospector V2 / Cadence / Candidate

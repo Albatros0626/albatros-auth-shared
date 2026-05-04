@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { createAuthState } from './auth-state'
 import {
   createGuardedHandle,
+  NotUnlockedError,
   NOT_UNLOCKED_ERROR,
   type IpcMainLike,
   type IpcHandler,
@@ -38,7 +39,7 @@ describe('guarded-handle', () => {
     expect(ipcMain.registered.has('contacts:getAll')).toBe(true)
   })
 
-  it('returns NOT_UNLOCKED_ERROR when locked', async () => {
+  it('throws NotUnlockedError when locked', async () => {
     const ipcMain = makeMockIpcMain()
     const authState = createAuthState()
     const guardedHandle = createGuardedHandle({ ipcMain, authState })
@@ -46,13 +47,29 @@ describe('guarded-handle', () => {
     const innerListener = vi.fn(() => 'ok')
     guardedHandle('contacts:getAll', innerListener)
 
-    const result = await ipcMain.invoke('contacts:getAll')
-
-    expect(result).toEqual(NOT_UNLOCKED_ERROR)
+    await expect(ipcMain.invoke('contacts:getAll')).rejects.toThrow(NotUnlockedError)
     expect(innerListener).not.toHaveBeenCalled()
   })
 
-  it('NOT_UNLOCKED_ERROR has the right shape', () => {
+  it('NotUnlockedError has name + code preserved', async () => {
+    const ipcMain = makeMockIpcMain()
+    const authState = createAuthState()
+    const guardedHandle = createGuardedHandle({ ipcMain, authState })
+
+    guardedHandle('contacts:getAll', () => 'ok')
+
+    try {
+      await ipcMain.invoke('contacts:getAll')
+      throw new Error('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(NotUnlockedError)
+      expect((err as NotUnlockedError).name).toBe('NotUnlockedError')
+      expect((err as NotUnlockedError).code).toBe('NOT_UNLOCKED')
+      expect((err as NotUnlockedError).message).toBeTruthy()
+    }
+  })
+
+  it('NOT_UNLOCKED_ERROR constant is still exported for back-compat (deprecated)', () => {
     expect(NOT_UNLOCKED_ERROR.success).toBe(false)
     expect(NOT_UNLOCKED_ERROR.error.code).toBe('NOT_UNLOCKED')
     expect(NOT_UNLOCKED_ERROR.error.message).toBeTruthy()
@@ -87,8 +104,7 @@ describe('guarded-handle', () => {
     // Re-lock before invoking
     authState.setUnlocked(false)
 
-    const result = await ipcMain.invoke('contacts:getAll')
-    expect(result).toEqual(NOT_UNLOCKED_ERROR)
+    await expect(ipcMain.invoke('contacts:getAll')).rejects.toThrow(NotUnlockedError)
     expect(innerListener).not.toHaveBeenCalled()
   })
 
@@ -126,8 +142,8 @@ describe('guarded-handle', () => {
     guardedHandle('a', () => 'A')
     guardedHandle('b', () => 'B')
 
-    expect(await ipcMain.invoke('a')).toEqual(NOT_UNLOCKED_ERROR)
-    expect(await ipcMain.invoke('b')).toEqual(NOT_UNLOCKED_ERROR)
+    await expect(ipcMain.invoke('a')).rejects.toThrow(NotUnlockedError)
+    await expect(ipcMain.invoke('b')).rejects.toThrow(NotUnlockedError)
 
     authState.setUnlocked(true)
 

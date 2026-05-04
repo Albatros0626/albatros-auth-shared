@@ -13,7 +13,7 @@ export { createActivityTracker, } from './activity-tracker';
 export type { ActivityTracker, CreateActivityTrackerOpts, } from './activity-tracker';
 export { attachActivityTracking, DEFAULT_ACTIVITY_EVENTS, DEFAULT_IPC_THROTTLE_MS, } from './activity-listener';
 export type { AttachActivityTrackingOpts, ActivityEventTarget, } from './activity-listener';
-export { isGuardedError } from './guarded-error-types';
+export { isGuardedError, isNotUnlockedError, } from './guarded-error-types';
 export type { GuardedError } from './guarded-error-types';
 export { RECOVERY_QUESTIONS, CUSTOM_QUESTION_MIN_LENGTH, RECOVERY_ANSWER_MIN_LENGTH, } from './recovery-questions';
 export type { LockoutStatus } from './types';

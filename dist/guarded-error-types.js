@@ -10,6 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isGuardedError = isGuardedError;
+exports.isNotUnlockedError = isNotUnlockedError;
 /**
  * Type guard for the `NOT_UNLOCKED` shape returned by guarded IPC handlers
  * when the app is locked. Useful in the renderer to distinguish a real
@@ -41,5 +42,26 @@ function isGuardedError(x) {
     if (typeof err !== 'object' || err === null)
         return false;
     return err.code === 'NOT_UNLOCKED';
+}
+/**
+ * Type guard for the v2.0.0+ exception thrown by `guardedHandle` when the
+ * app is locked. Electron preserves `name` across the IPC boundary, so this
+ * works in the renderer too:
+ *
+ * ```ts
+ * try {
+ *   const result = await window.electronAPI.getContacts()
+ *   // result is the actual array — no shape check needed
+ * } catch (err) {
+ *   if (isNotUnlockedError(err)) {
+ *     // The fetch raced a lock — ignore silently; next post-unlock fetch will repopulate.
+ *     return
+ *   }
+ *   throw err
+ * }
+ * ```
+ */
+function isNotUnlockedError(err) {
+    return err instanceof Error && err.name === 'NotUnlockedError';
 }
 //# sourceMappingURL=guarded-error-types.js.map
