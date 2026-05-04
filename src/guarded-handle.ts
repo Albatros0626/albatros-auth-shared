@@ -1,4 +1,8 @@
 import type { AuthState } from './auth-state'
+import type { GuardedError } from './guarded-error-types'
+
+export type { GuardedError }
+export { isGuardedError } from './guarded-error-types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type IpcHandler = (event: any, ...args: any[]) => any
@@ -10,14 +14,6 @@ export interface IpcMainLike {
 export interface CreateGuardedHandleOpts {
   ipcMain: IpcMainLike
   authState: AuthState
-}
-
-export interface GuardedError {
-  success: false
-  error: {
-    code: 'NOT_UNLOCKED'
-    message: string
-  }
 }
 
 export const NOT_UNLOCKED_ERROR: GuardedError = {

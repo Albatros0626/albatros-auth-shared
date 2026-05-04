@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-04
+
+Production hardening pass after the Prospector V2 / Cadence / Candidate
+Manager rollout. No breaking changes — apps continue to work without code
+changes; the new APIs let them simplify and harden their integrations.
+
+### Added
+
+- **Sleep-aware idle-watcher**. `createIdleWatcher` now detects when the
+  host machine has slept (gap between two consecutive ticks larger than
+  `pollMs * sleepDetectionMultiplier`, default `3`) and grants a fresh
+  idle window via `sessionService.recordActivity()` instead of locking
+  immediately on resume. Configurable via the new
+  `sleepDetectionMultiplier` option; pass `Infinity` for legacy
+  lock-on-wake behavior.
+- **`attachActivityTracking()` helper** in `@albatros/auth-shared/browser`
+  — bundles `createActivityTracker` + window listener wiring + IPC
+  throttle into a single dispose-returning call. Decoupled from React
+  and from DOM types (uses a structural `ActivityEventTarget`).
+- **`useIdleLock` React hook** in the new `@albatros/auth-shared/react`
+  subpath. Stabilizes inline arrow callbacks via `useRef` so the effect
+  only re-runs when `timeoutMinutes` changes — eliminates the foot-gun
+  where parent re-renders silently reset the idle timer or detach
+  listeners. Supersedes the per-app local `useIdleLock` copies.
+- **`isGuardedError(x)` type guard** in
+  `@albatros/auth-shared/browser` (and re-exported from the main
+  entry). Lets renderer stores detect a `NOT_UNLOCKED` envelope without
+  a hand-written `Array.isArray` check, until v2.0.0 switches the API
+  to throw.
+
+### Changed
+
+- `package.json` exports gain `./react` subpath. `react` added to
+  `peerDependencies` as **optional** — only consumers of the React hook
+  need it installed.
+- `tsconfig.json` `lib` now includes `DOM` (needed for the activity
+  helper and the React hook). Existing main-process code is unaffected.
+
+### Tests
+
+- 15 new tests: 4 sleep-detection (idle-watcher), 9
+  `attachActivityTracking`, 6 `useIdleLock`, 8 `isGuardedError`. Total
+  253 (previously 238).
+
+### Migration notes
+
+No action required to upgrade. To benefit from the new APIs:
+
+- Replace the per-app `useIdleLock.ts` with
+  `import { useIdleLock } from '@albatros/auth-shared/react'`.
+- In stores that hit guarded IPC, wrap the result with
+  `isGuardedError(result)` instead of bespoke shape checks.
+
+See [docs/PLAN_v1.2.0.md](docs/PLAN_v1.2.0.md) for the full task list and
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for the bug reports
+that motivated this release.
+
 ## [1.1.4] - 2026-05-02
 
 ### Added

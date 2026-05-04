@@ -1,4 +1,4 @@
-export const VERSION = '1.1.4' as const
+export const VERSION = '1.2.0' as const
 
 export {
   createAuthService,
@@ -34,6 +34,7 @@ export type { AuthState, UnlockListener } from './auth-state'
 export {
   createGuardedHandle,
   NOT_UNLOCKED_ERROR,
+  isGuardedError,
 } from './guarded-handle'
 export type {
   GuardedHandle,

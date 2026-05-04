@@ -11,9 +11,9 @@ Guide d'intégration pas-à-pas pour brancher une app Electron sur la mutualisat
 ## TL;DR
 
 ```bash
-# 1. Installer le package
-pnpm add github:Albatros0626/albatros-auth-shared#v1.1.0
-# (ou npm install --save github:Albatros0626/albatros-auth-shared#v1.1.0)
+# 1. Installer le package (≥ v1.2.0 recommandé)
+pnpm add github:Albatros0626/albatros-auth-shared#v1.2.0
+# (ou npm install --save github:Albatros0626/albatros-auth-shared#v1.2.0)
 ```
 
 Côté main :
@@ -24,9 +24,40 @@ Côté main :
 - Adapter les handlers `auth:*` et `secrets:*` pour utiliser les services injectés
 
 Côté renderer :
-- Hook `useIdleLock` (~50 lignes) qui wrap `createActivityTracker` du package
+- Importer le hook `useIdleLock` directement depuis le package (≥ v1.2.0) :
+  `import { useIdleLock } from '@albatros/auth-shared/react'` — plus de copie locale à maintenir.
 - Store/context auth : ajouter `applyExternalState` + subscribe à `onStateChanged`
-- Importer depuis `@albatros/auth-shared/browser` (pas `@albatros/auth-shared`) — sinon Vite plante
+- Pour les autres imports renderer, utiliser `@albatros/auth-shared/browser` (pas le main entry) — sinon Vite plante sur les modules Node.
+
+### Pièges courants
+
+**Auto-lock — callbacks instables.** Avant la v1.2.0, passer des arrow functions inline à `useIdleLock` causait une re-création du tracker à chaque render du parent :
+
+```tsx
+// ❌ Anti-pattern (v1.1.x : effet recréé à chaque render → timer reset)
+useIdleLock({
+  timeoutMinutes,
+  onLock:    () => { void lock() },
+  onActivity:() => { void window.electronAPI.authRecordActivity() },
+})
+```
+
+À partir de la v1.2.0, le hook utilise `useRef` en interne — vous pouvez passer des arrow functions inline en toute sécurité, l'effet ne se re-run que sur changement de `timeoutMinutes`.
+
+**Erreur `NOT_UNLOCKED` côté store.** Quand un appel IPC `guardedHandle()` court-circuite parce que l'app est verrouillée, le main retourne actuellement (v1.x) un objet `{ success: false, error: { code: 'NOT_UNLOCKED', ... } }`. Si le store le stocke tel quel, les composants crashent ensuite sur `.filter()` / itération. Utiliser `isGuardedError` :
+
+```ts
+import { isGuardedError } from '@albatros/auth-shared/browser'
+
+const result = await window.electronAPI.getContacts()
+if (isGuardedError(result)) {
+  set({ contacts: [] })  // grace : la prochaine fetch (post-unlock) repeuplera
+  return
+}
+set({ contacts: result })
+```
+
+> En v2.0.0 le package basculera sur un `throw NotUnlockedError()` — votre `try/catch` autour de l'IPC suffira et `isGuardedError` deviendra inutile. Cf. [PLAN_v2.0.0.md](PLAN_v2.0.0.md).
 
 ---
 

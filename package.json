@@ -1,6 +1,6 @@
 {
   "name": "@albatros/auth-shared",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "description": "Shared application-level authentication, secrets vault and session sync for Albatros desktop apps (Electron).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,6 +12,10 @@
     "./browser": {
       "types": "./dist/browser.d.ts",
       "default": "./dist/browser.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
     }
   },
   "files": [
@@ -34,12 +38,20 @@
   "license": "UNLICENSED",
   "private": true,
   "peerDependencies": {
-    "electron": ">=28.0.0"
+    "electron": ">=28.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true }
   },
   "devDependencies": {
+    "@testing-library/react": "^14.3.1",
     "@types/node": "^20.11.0",
+    "@types/react": "^18.3.28",
     "@vitest/coverage-v8": "^1.6.0",
     "electron": "^28.0.0",
+    "jsdom": "^29.1.1",
+    "react": "^18.3.1",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"

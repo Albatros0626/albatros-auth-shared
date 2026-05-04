@@ -198,4 +198,101 @@ describe('idle-watcher', () => {
     expect(w.isRunning()).toBe(true)
     w.stop()
   })
+
+  // Sleep detection (v1.2.0+) -----------------------------------------------
+
+  it('grants grace period when system wakes up from sleep (no immediate lock)', () => {
+    vi.useFakeTimers()
+    const session = makeStubSession(makeValidState())
+    const onLock = vi.fn()
+    const w = createIdleWatcher({
+      sessionService: session,
+      onLock,
+      pollMs: 100,
+      sleepDetectionMultiplier: 3,
+    })
+    w.start()
+
+    // Simulate system sleep by jumping the clock forward by 60s.
+    // setSystemTime moves Date.now() without firing queued timers.
+    vi.setSystemTime(Date.now() + 60_000)
+
+    // Mark session as expired and trigger a check via watch.
+    // drift = 60000 > pollMs * 3 (= 300) → sleep detected.
+    session.setMockState(makeExpiredState())
+    session.triggerWatch()
+
+    expect(session.recordActivity).toHaveBeenCalledTimes(1)
+    expect(onLock).not.toHaveBeenCalled()
+    w.stop()
+  })
+
+  it('locks normally on a tick after the sleep wake-up grace', () => {
+    vi.useFakeTimers()
+    const session = makeStubSession(makeValidState())
+    const onLock = vi.fn()
+    const w = createIdleWatcher({
+      sessionService: session,
+      onLock,
+      pollMs: 100,
+      sleepDetectionMultiplier: 3,
+    })
+    w.start()
+
+    // Wake-up tick: drift large → grace, no lock
+    vi.setSystemTime(Date.now() + 60_000)
+    session.setMockState(makeExpiredState())
+    session.triggerWatch()
+    expect(onLock).not.toHaveBeenCalled()
+
+    // Subsequent setInterval tick (drift small) detects expiration → lock fires
+    vi.advanceTimersByTime(100)
+    expect(onLock).toHaveBeenCalledTimes(1)
+  })
+
+  it('legacy behavior with sleepDetectionMultiplier: Infinity (lock immediately on wake)', () => {
+    vi.useFakeTimers()
+    const session = makeStubSession(makeValidState())
+    const onLock = vi.fn()
+    const w = createIdleWatcher({
+      sessionService: session,
+      onLock,
+      pollMs: 100,
+      sleepDetectionMultiplier: Infinity,
+    })
+    w.start()
+
+    vi.setSystemTime(Date.now() + 60_000)
+    session.setMockState(makeExpiredState())
+    session.triggerWatch()
+
+    // No sleep detection → lock fires immediately
+    expect(session.recordActivity).not.toHaveBeenCalled()
+    expect(onLock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not trip sleep detection on a normal poll cadence', () => {
+    vi.useFakeTimers()
+    const session = makeStubSession(makeValidState())
+    const onLock = vi.fn()
+    const w = createIdleWatcher({
+      sessionService: session,
+      onLock,
+      pollMs: 100,
+      sleepDetectionMultiplier: 3,
+    })
+    w.start()
+
+    // 5 normal ticks (drift = 100ms each, < 300ms threshold)
+    vi.advanceTimersByTime(500)
+
+    expect(session.recordActivity).not.toHaveBeenCalled()
+    expect(onLock).not.toHaveBeenCalled()
+    w.stop()
+  })
+
+  it('exports DEFAULT_SLEEP_DETECTION_MULTIPLIER', async () => {
+    const mod = await import('./idle-watcher')
+    expect(mod.DEFAULT_SLEEP_DETECTION_MULTIPLIER).toBe(3)
+  })
 })
