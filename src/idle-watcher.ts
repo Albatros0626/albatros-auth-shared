@@ -109,11 +109,19 @@ export function createIdleWatcher(opts: CreateIdleWatcherOpts): IdleWatcher {
       running = true
       triggered = false
       lastTickAt = Date.now()
-      // Immediate check covers the case where session was already expired/locked at start
-      check()
-      if (!running) return // start triggered onLock synchronously, already stopped
+
+      // Set up the polling + watch FIRST so they're armed even if the deferred
+      // initial check below fires onLock and stops us.
       interval = setInterval(check, pollMs)
       unsubscribe = sessionService.watch(() => check())
+
+      // Defer the initial check to the next macrotask. If start() was called
+      // from an unlock handler that does setUnlocked(true) → recordUnlock(...)
+      // synchronously, the deferred check runs AFTER recordUnlock has updated
+      // session.bin, avoiding the race where an immediate check would see
+      // stale "locked" state and re-lock the app. (v2.0.1: defense-in-depth
+      // for consumers that haven't reordered their unlock handlers yet.)
+      setTimeout(() => { if (running) check() }, 0)
     },
     stop(): void {
       stopInternal()

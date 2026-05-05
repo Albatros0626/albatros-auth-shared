@@ -384,11 +384,21 @@ export function setupAuthHandlers(ipcMain: IpcMain): void {
     catch (e: any) { return { success: false, error: e.message } }
   })
 
+  // ⚠️ ORDRE IMPORTANT — recordUnlock AVANT setUnlocked.
+  // setUnlocked déclenche en synchrone le restart de l'idle-watcher dont
+  // l'initial check lit session.bin. Si session.bin n'a pas encore été
+  // mis à jour (lockedAt non-null restant du lock précédent), le watcher
+  // re-déclenche onLock immédiatement → l'app se re-locke avant même
+  // que verifyCode ne réponde au renderer. Mettre à jour session.bin
+  // d'abord garantit que le check voit l'état frais.
+  // (À partir de v2.0.1, l'initial check est déféré au prochain
+  // macrotask — défense en profondeur — mais l'ordre correct reste
+  // recommandé pour les anciennes versions.)
   ipcMain.handle('auth:setup', async (_e, code: string, question: string, answer: string) => {
     try {
       await authService.setup({ code, recoveryQuestion: question, recoveryAnswer: answer })
-      authState.setUnlocked(true)
       sessionService.recordUnlock({ lockTimeoutMinutes: authService.getLockTimeoutMinutes() })
+      authState.setUnlocked(true)
       return { success: true }
     } catch (e: any) { return { success: false, error: e.message } }
   })
@@ -397,8 +407,8 @@ export function setupAuthHandlers(ipcMain: IpcMain): void {
     try {
       const ok = await authService.verifyCode(code)
       if (ok) {
-        authState.setUnlocked(true)
         sessionService.recordUnlock({ lockTimeoutMinutes: authService.getLockTimeoutMinutes() })
+        authState.setUnlocked(true)
       }
       return { success: true, ok, lockoutStatus: authService.getLockoutStatus() }
     } catch (e: any) { return { success: false, error: e.message } }
@@ -417,8 +427,8 @@ export function setupAuthHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('auth:recover', async (_e, answer: string, newCode: string) => {
     try {
       await authService.recover(answer, newCode)
-      authState.setUnlocked(true)
       sessionService.recordUnlock({ lockTimeoutMinutes: authService.getLockTimeoutMinutes() })
+      authState.setUnlocked(true)
       return { success: true }
     } catch (e: any) { return { success: false, error: e.message } }
   })

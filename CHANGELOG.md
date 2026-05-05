@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-05-05
+
+### Fixed
+
+- **Idle-watcher initial check is now deferred to the next macrotask**
+  (defense in depth). When `start()` was called from an unlock handler
+  that flipped `authState` BEFORE writing `session.bin`
+  (`setUnlocked(true)` then `recordUnlock(...)`), the synchronous
+  immediate check inside the new watcher would read stale "locked"
+  state and re-fire `onLock`, silently re-locking the app before
+  `verifyCode`/`setup`/`recover` could even respond to the renderer.
+  Symptom: every guarded IPC handler called by the renderer
+  post-unlock rejected with `NotUnlockedError`, blank dashboard,
+  empty settings.
+
+  The check is now deferred via `setTimeout(check, 0)`, which lets any
+  same-tick post-state writes complete before `session.bin` is read.
+  `setInterval` and `sessionService.watch()` are armed up-front, so
+  external lock notifications continue to work synchronously.
+
+  Original race fixed in consumer apps as well (Prospector V2 commit
+  826d3c2, Cadence 3d980b3, Candidate Manager 55e1f79) by reordering
+  `recordUnlock` before `setUnlocked` — the recommended pattern is
+  documented in `docs/INTEGRATION.md`. The package-level fix here is
+  defense in depth for future consumers that haven't applied the
+  reorder.
+
+### Tests
+
+- 1 new test `deferred initial check tolerates same-tick session.bin
+  updates` reproduces the unlock race and asserts the deferred check
+  reads the fresh state.
+- 2 existing tests that asserted the immediate check was synchronous
+  are now `async` and `await new Promise((r) => setTimeout(r, 0))`
+  before asserting the spy was called.
+
+### Documentation
+
+- `docs/INTEGRATION.md` updated with explicit ordering rules for
+  `recordUnlock` and `setUnlocked` in unlock handlers, with a comment
+  block explaining the race in inline code.
+
 ## [2.0.0] - 2026-05-04
 
 ### BREAKING CHANGE

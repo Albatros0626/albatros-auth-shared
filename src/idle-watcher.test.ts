@@ -102,11 +102,16 @@ describe('idle-watcher', () => {
     expect(onLock).toHaveBeenCalledTimes(1)
   })
 
-  it('fires onLock immediately if session is already invalid at start', () => {
+  it('fires onLock on next tick if session is already invalid at start', async () => {
     const session = makeStubSession(makeExpiredState())
     const onLock = vi.fn()
     const w = createIdleWatcher({ sessionService: session, onLock, pollMs: 100 })
     w.start()
+
+    // v2.0.1+: initial check is deferred to the next macrotask so unlock
+    // handlers that flip state synchronously can finish before we read
+    // session.bin. Wait a tick for the deferred check to fire.
+    await new Promise((r) => setTimeout(r, 0))
 
     expect(onLock).toHaveBeenCalledTimes(1)
     expect(w.isRunning()).toBe(false) // auto-stopped after firing
@@ -178,7 +183,7 @@ describe('idle-watcher', () => {
     expect(w.isRunning()).toBe(false)
   })
 
-  it('isolates an onLock that throws (logs but does not crash)', () => {
+  it('isolates an onLock that throws (logs but does not crash)', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const session = makeStubSession(makeExpiredState())
     const w = createIdleWatcher({
@@ -187,8 +192,11 @@ describe('idle-watcher', () => {
       pollMs: 100,
     })
     expect(() => w.start()).not.toThrow()
+    // Wait for the deferred initial check (v2.0.1+) to fire onLock.
+    await new Promise((r) => setTimeout(r, 0))
     expect(errorSpy).toHaveBeenCalled()
     errorSpy.mockRestore()
+    w.stop()
   })
 
   it('uses default pollMs when not specified', () => {
@@ -294,5 +302,33 @@ describe('idle-watcher', () => {
   it('exports DEFAULT_SLEEP_DETECTION_MULTIPLIER', async () => {
     const mod = await import('./idle-watcher')
     expect(mod.DEFAULT_SLEEP_DETECTION_MULTIPLIER).toBe(3)
+  })
+
+  // Defense-in-depth (v2.0.1+) ----------------------------------------------
+
+  it('deferred initial check tolerates same-tick session.bin updates', async () => {
+    // Reproduces the bug fixed in v2.0.1: a caller that flips authState first
+    // and then writes session.bin synchronously (in that order) used to race
+    // the watcher's immediate check, which read stale "locked" state and
+    // re-fired onLock. With the deferred initial check, the synchronous
+    // session.bin write completes before the check runs.
+    const lockedState = makeLockedState()
+    const validState = makeValidState()
+    const session = makeStubSession(lockedState)
+    const onLock = vi.fn()
+    const w = createIdleWatcher({ sessionService: session, onLock, pollMs: 100 })
+
+    // Simulate the unlock handler: start() the watcher, then SAME TICK
+    // overwrite session.bin to the unlocked state (as recordUnlock would do).
+    w.start()
+    session.setMockState(validState)
+
+    // Wait for the deferred check.
+    await new Promise((r) => setTimeout(r, 0))
+
+    // The deferred check sees the FRESH valid state, not the stale locked one.
+    expect(onLock).not.toHaveBeenCalled()
+    expect(w.isRunning()).toBe(true)
+    w.stop()
   })
 })
