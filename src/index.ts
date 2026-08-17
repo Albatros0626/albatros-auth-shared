@@ -1,4 +1,4 @@
-export const VERSION = '2.0.1' as const
+export const VERSION = '2.1.0' as const
 
 export {
   createAuthService,
@@ -27,6 +27,15 @@ export {
 } from './secrets-service'
 
 export type { SecretsService } from './secrets-service'
+
+export {
+  createBiometricService,
+  BIOMETRIC_BLOB_VERSION,
+  SUPPORTED_BIOMETRIC_BLOB_VERSIONS,
+  DEFAULT_BIOMETRIC_KEY_NAME,
+} from './biometric-service'
+
+export type { BiometricService } from './biometric-service'
 
 export { createAuthState } from './auth-state'
 export type { AuthState, UnlockListener } from './auth-state'
@@ -93,6 +102,13 @@ export type {
   SessionState,
   SessionFileEnvelope,
   CreateSessionServiceOpts,
+  BiometricProviderLike,
+  BiometricRejectionReason,
+  BiometricBlob,
+  BiometricAuthServiceLike,
+  CreateBiometricServiceOpts,
+  BiometricUnlockFailure,
+  BiometricUnlockResult,
 } from './types'
 
 export {
@@ -101,4 +117,8 @@ export {
   KeyNotAllowedError,
   DPAPIUnavailableError,
   SecretsVaultVersionUnsupportedError,
+  BiometricUnavailableError,
+  BiometricCodeRejectedError,
+  BiometricNonDeterministicError,
+  BIOMETRIC_REJECTION_REASONS,
 } from './types'

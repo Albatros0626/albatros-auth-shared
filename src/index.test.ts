@@ -2,16 +2,22 @@ import { describe, it, expect } from 'vitest'
 import {
   VERSION,
   createAuthService,
+  createBiometricService,
   validateCode,
   normalizeAnswer,
   RECOVERY_QUESTIONS,
+  BIOMETRIC_BLOB_VERSION,
+  DEFAULT_BIOMETRIC_KEY_NAME,
   VaultVersionUnsupportedError,
   VaultNotInitializedError,
+  BiometricUnavailableError,
+  BiometricCodeRejectedError,
+  BiometricNonDeterministicError,
 } from './index'
 
 describe('package public API', () => {
   it('exports VERSION constant', () => {
-    expect(VERSION).toBe('2.0.1')
+    expect(VERSION).toBe('2.1.0')
   })
 
   it('exports auth-service factory', () => {
@@ -31,5 +37,17 @@ describe('package public API', () => {
   it('exports error classes', () => {
     expect(typeof VaultVersionUnsupportedError).toBe('function')
     expect(typeof VaultNotInitializedError).toBe('function')
+  })
+
+  it('exports biometric-service factory and constants', () => {
+    expect(typeof createBiometricService).toBe('function')
+    expect(BIOMETRIC_BLOB_VERSION).toBe(1)
+    expect(typeof DEFAULT_BIOMETRIC_KEY_NAME).toBe('string')
+  })
+
+  it('exports biometric error classes', () => {
+    expect(typeof BiometricUnavailableError).toBe('function')
+    expect(typeof BiometricCodeRejectedError).toBe('function')
+    expect(typeof BiometricNonDeterministicError).toBe('function')
   })
 })

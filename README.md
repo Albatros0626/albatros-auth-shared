@@ -10,6 +10,7 @@ Used by Prospector V2, Cadence, Candidate Manager and future apps. Unlocking one
 |---|---|
 | `auth-service` | PBKDF2-SHA512 password / recovery question, anti-brute-force lockout, vault format v2 with auto-migration from v1 |
 | `secrets-service` | DPAPI-encrypted vault (Windows safeStorage / macOS Keychain / Linux libsecret) with per-app allowlist enforcement |
+| `biometric-service` | Optional Windows Hello unlock — a TPM-backed signature decrypts the stored code, which still goes through `verifyCode()` |
 | `auth-state` | In-memory unlock flag with `onUnlockChange` event subscriber |
 | `guarded-handle` | IPC wrapper that rejects calls with `NOT_UNLOCKED_ERROR` while locked |
 | `session-service` | Shared `session.bin` (DPAPI-encrypted) so unlocking one app unlocks the others |
@@ -185,6 +186,140 @@ useIdleLock({
 })
 ```
 
+## Biometric unlock (Windows Hello)
+
+Entirely optional. An app that injects no provider behaves exactly as before —
+`isEnrolled()` stays `false`, no button is shown, nothing changes on disk.
+
+**Hello does not replace verification, it restores the factor.** A TPM-backed
+signature decrypts the stored code, which then goes through the ordinary
+`verifyCode()`. PBKDF2, constant-time comparison and the lockout counter all
+still apply, and exactly one code path can declare the app unlocked.
+
+```ts
+import { createBiometricService } from '@albatros/auth-shared'
+import { createWindowsHelloProvider } from '@albatros/win-hello' // native, Windows only
+
+const biometricService = createBiometricService({
+  blobPath: path.join(sharedDir, 'biometric.bin'),
+  authService,
+  // Omit or pass null on platforms without a provider — every call then
+  // reports "unavailable" instead of forcing null checks at each call site.
+  provider: process.platform === 'win32' ? createWindowsHelloProvider() : null,
+})
+
+// Unlock — NOT guarded, like auth:verifyCode (reachable while locked).
+ipcMain.handle('auth:biometricUnlock', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)!
+  const result = await biometricService.unlock(win.getNativeWindowHandle())
+  if (result.ok) {
+    sessionService.recordUnlock({
+      lockTimeoutMinutes: authService.getLockTimeoutMinutes(),
+    })
+    authState.setUnlocked(true)
+  }
+  return result
+})
+
+// Settings — enrolment requires the code the user just typed. GUARDED, like
+// every non-auth channel: settings are only reachable unlocked, and an
+// unguarded enroll would hand a locked renderer a brute-force oracle —
+// enroll() validates through verifyCurrentCode(), which by design neither
+// increments failed_attempts nor checks the lockout window.
+guardedHandle('auth:biometricEnroll', async (event, code: string) => {
+  const win = BrowserWindow.fromWebContents(event.sender)!
+  await biometricService.enroll(code, win.getNativeWindowHandle())
+})
+
+// GUARDED too: a locked renderer must not be able to revoke the enrolment
+// of every Albatros app.
+guardedHandle('auth:biometricDisable', () => biometricService.disable())
+
+// Status is needed by the lock screen (to decide whether to show the button),
+// so it stays unguarded — it exposes nothing sensitive.
+ipcMain.handle('auth:biometricStatus', async () => ({
+  supported: await biometricService.isSupported(),
+  enrolled: biometricService.isEnrolled(),
+}))
+```
+
+`auth:biometricUnlock` and `auth:biometricStatus` are the **only** unguarded
+biometric channels.
+
+The window handle is resolved **in the main process from the IPC sender**, so
+the renderer never deals with an HWND — the button calls
+`window.electronAPI.auth.biometricUnlock()` with no arguments.
+
+### Unlock screen
+
+Keep the code field as the primary path and add the Hello button beside it.
+
+- **Gate the button on `isEnrolled()` alone** — a cheap synchronous file check.
+  Do not call `isSupported()` on every render: a blob can only exist if
+  enrolment succeeded, so its presence already proves Hello worked. If Hello
+  disappears later, the call fails with `key-mismatch`, the blob is discarded
+  and the button vanishes on its own.
+- **Hide it, don't disable it**, when there is no enrolment — enabling happens
+  in settings, not here.
+- **Show a pending state**: a Hello prompt takes 0.3–5.6s in practice.
+- **Leave the code field usable** during the prompt. First path to succeed
+  wins; ignore the other's late result. Do not block the field — the user would
+  be trapped if Hello never answers.
+- **Do not auto-trigger Hello on screen load.** A prompt raised without
+  foreground focus is exactly the condition that produces
+  `WINBIO_E_INVALID_TICKET`; a click guarantees the focus.
+
+Failure handling:
+
+| `failure` | Suggested treatment |
+|---|---|
+| `rejected` + `reason: 'cancelled'` | say nothing — the user cancelled on purpose |
+| `rejected` + `retries-exhausted` / `device-locked` | "Windows Hello is locked — use your code" |
+| `stale` / `key-mismatch` | "Your code changed — re-enable Windows Hello in settings" |
+| `code-refused` | show `result.lockoutStatus`, as for a rejected code |
+| `not-enrolled` | should not happen: the button was hidden |
+
+### Settings
+
+Three states, and only this screen has to explain itself:
+
+1. **No provider** (no addon, non-Windows) → hide the section entirely.
+2. **`isSupported()` false** → show the row disabled, with a shortcut to
+   `shell.openExternal('ms-settings:signinoptions-launchfingerprintenrollment')`.
+3. **`isSupported()` true** → offer the toggle; enabling asks for the code.
+
+Say **"Windows Hello"**, not "fingerprint": Windows picks the modality (face,
+fingerprint or PIN) and no API can require one. A PIN-only Hello is perfectly
+valid here — same TPM key, same user verification, only the convenience differs.
+
+Disabling revokes the enrolment **for every Albatros app**, since there is one
+shared enrolment. Word the confirmation accordingly.
+
+One enrolment covers every app because Hello keys are not scoped per
+executable: a key created by one binary opens from another under the same user
+(verified with two differently-named executables). The package-identity
+scoping that applies to UWP apps does not affect unpackaged Win32 builds.
+
+### Threat model
+
+What this protects against, and what it does not:
+
+- The private key lives in the TPM, is non-exportable, and is only usable after
+  a Hello verification. Copying `biometric.bin` to another machine yields
+  nothing.
+- **The blob is a plaintext-equivalent of the code** on the machine that holds
+  the key. Any process running as the user can read the file *and* raise a Hello
+  prompt with the stored challenge — a malware in session that gets the user to
+  present a finger obtains the code. This is the same model Bitwarden and
+  KeePassXC accept for their Hello unlock.
+- Every cleartext field is bound into the AES-GCM tag as additional
+  authenticated data, so an attacker with write access cannot forge `boundTo` to
+  keep a stale blob alive, nor swap the challenge.
+- The blob is **not** additionally wrapped in DPAPI. `safeStorage` derives a
+  per-app master key — the reason `session.bin` v1 could not be shared across
+  apps (see `session-service.ts`) — and raw DPAPI would not stop a process
+  running under the same user account anyway.
+
 ## Integrating in a new app
 
 For step-by-step integration in a fresh Electron app, see **[docs/INTEGRATION.md](docs/INTEGRATION.md)** — it includes the auth-context template, IPC handler patterns, renderer hook, migration recipes, and a smoke-test checklist.
@@ -201,6 +336,11 @@ import {
 
   // Secrets (DPAPI vault)
   createSecretsService, anonymizeKeyForLog, SECRETS_VAULT_VERSION,
+
+  // Biometric unlock (Windows Hello) — optional
+  createBiometricService,
+  BIOMETRIC_BLOB_VERSION, SUPPORTED_BIOMETRIC_BLOB_VERSIONS,
+  DEFAULT_BIOMETRIC_KEY_NAME,
 
   // State + IPC guard
   createAuthState, createGuardedHandle, NOT_UNLOCKED_ERROR,
@@ -224,6 +364,8 @@ import {
   VaultVersionUnsupportedError, VaultNotInitializedError,
   KeyNotAllowedError, DPAPIUnavailableError,
   SecretsVaultVersionUnsupportedError,
+  BiometricUnavailableError, BiometricCodeRejectedError,
+  BiometricNonDeterministicError,
 } from '@albatros/auth-shared'
 ```
 
@@ -235,6 +377,7 @@ All the major types (`AuthService`, `SecretsService`, `SessionState`, `LockoutSt
 |---|---|---|
 | `%LOCALAPPDATA%\AlbatrosApps\auth.vault` | Master password + recovery + lock policy | yes |
 | `%LOCALAPPDATA%\AlbatrosApps\session.bin` | Current unlock state (DPAPI-encrypted) | yes |
+| `%LOCALAPPDATA%\AlbatrosApps\biometric.bin` | Windows Hello enrolment (optional) | yes |
 | `%LOCALAPPDATA%\AlbatrosApps\migration.log` | One-shot migration audit (JSONL) | yes |
 | `%APPDATA%\<app>\secrets.vault` | App-specific API keys (DPAPI-encrypted) | no |
 | `%APPDATA%\<app>\<other app data>` | Database, settings, etc. | no |

@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.BACKUP_SUFFIX = exports.appendMigrationLog = exports.detectMigrationConflict = exports.migrateLocalAuthToShared = exports.DEFAULT_IDLE_POLL_MS = exports.createIdleWatcher = exports.createActivityTracker = exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = exports.createSessionService = exports.isNotUnlockedError = exports.isGuardedError = exports.NOT_UNLOCKED_ERROR = exports.NotUnlockedError = exports.createGuardedHandle = exports.createAuthState = exports.SECRETS_VAULT_VERSION = exports.anonymizeKeyForLog = exports.createSecretsService = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
-exports.VERSION = '2.0.1';
+exports.BiometricUnavailableError = exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.BACKUP_SUFFIX = exports.appendMigrationLog = exports.detectMigrationConflict = exports.migrateLocalAuthToShared = exports.DEFAULT_IDLE_POLL_MS = exports.createIdleWatcher = exports.createActivityTracker = exports.DEFAULT_WATCH_DEBOUNCE_MS = exports.DEFAULT_ACTIVITY_THROTTLE_MS = exports.SESSION_FILE_VERSION = exports.SESSION_FILENAME = exports.createSessionService = exports.isNotUnlockedError = exports.isGuardedError = exports.NOT_UNLOCKED_ERROR = exports.NotUnlockedError = exports.createGuardedHandle = exports.createAuthState = exports.DEFAULT_BIOMETRIC_KEY_NAME = exports.SUPPORTED_BIOMETRIC_BLOB_VERSIONS = exports.BIOMETRIC_BLOB_VERSION = exports.createBiometricService = exports.SECRETS_VAULT_VERSION = exports.anonymizeKeyForLog = exports.createSecretsService = exports.DEFAULT_LOCK_TIMEOUT_MINUTES = exports.DELAY_MAX_SECONDS = exports.DELAY_START_AT_ATTEMPT = exports.LOCKOUT_DURATION_MS = exports.LOCKOUT_THRESHOLD = exports.SUPPORTED_VAULT_VERSIONS = exports.VAULT_VERSION = exports.CODE_MIN_LENGTH = exports.SALT_LENGTH = exports.PBKDF2_DIGEST = exports.PBKDF2_KEYLEN = exports.PBKDF2_ITERATIONS = exports.normalizeAnswer = exports.validateCode = exports.createAuthService = exports.VERSION = void 0;
+exports.BIOMETRIC_REJECTION_REASONS = exports.BiometricNonDeterministicError = exports.BiometricCodeRejectedError = void 0;
+exports.VERSION = '2.1.0';
 var auth_service_1 = require("./auth-service");
 Object.defineProperty(exports, "createAuthService", { enumerable: true, get: function () { return auth_service_1.createAuthService; } });
 Object.defineProperty(exports, "validateCode", { enumerable: true, get: function () { return auth_service_1.validateCode; } });
@@ -22,6 +23,11 @@ var secrets_service_1 = require("./secrets-service");
 Object.defineProperty(exports, "createSecretsService", { enumerable: true, get: function () { return secrets_service_1.createSecretsService; } });
 Object.defineProperty(exports, "anonymizeKeyForLog", { enumerable: true, get: function () { return secrets_service_1.anonymizeKeyForLog; } });
 Object.defineProperty(exports, "SECRETS_VAULT_VERSION", { enumerable: true, get: function () { return secrets_service_1.SECRETS_VAULT_VERSION; } });
+var biometric_service_1 = require("./biometric-service");
+Object.defineProperty(exports, "createBiometricService", { enumerable: true, get: function () { return biometric_service_1.createBiometricService; } });
+Object.defineProperty(exports, "BIOMETRIC_BLOB_VERSION", { enumerable: true, get: function () { return biometric_service_1.BIOMETRIC_BLOB_VERSION; } });
+Object.defineProperty(exports, "SUPPORTED_BIOMETRIC_BLOB_VERSIONS", { enumerable: true, get: function () { return biometric_service_1.SUPPORTED_BIOMETRIC_BLOB_VERSIONS; } });
+Object.defineProperty(exports, "DEFAULT_BIOMETRIC_KEY_NAME", { enumerable: true, get: function () { return biometric_service_1.DEFAULT_BIOMETRIC_KEY_NAME; } });
 var auth_state_1 = require("./auth-state");
 Object.defineProperty(exports, "createAuthState", { enumerable: true, get: function () { return auth_state_1.createAuthState; } });
 var guarded_handle_1 = require("./guarded-handle");
@@ -57,4 +63,8 @@ Object.defineProperty(exports, "VaultNotInitializedError", { enumerable: true, g
 Object.defineProperty(exports, "KeyNotAllowedError", { enumerable: true, get: function () { return types_1.KeyNotAllowedError; } });
 Object.defineProperty(exports, "DPAPIUnavailableError", { enumerable: true, get: function () { return types_1.DPAPIUnavailableError; } });
 Object.defineProperty(exports, "SecretsVaultVersionUnsupportedError", { enumerable: true, get: function () { return types_1.SecretsVaultVersionUnsupportedError; } });
+Object.defineProperty(exports, "BiometricUnavailableError", { enumerable: true, get: function () { return types_1.BiometricUnavailableError; } });
+Object.defineProperty(exports, "BiometricCodeRejectedError", { enumerable: true, get: function () { return types_1.BiometricCodeRejectedError; } });
+Object.defineProperty(exports, "BiometricNonDeterministicError", { enumerable: true, get: function () { return types_1.BiometricNonDeterministicError; } });
+Object.defineProperty(exports, "BIOMETRIC_REJECTION_REASONS", { enumerable: true, get: function () { return types_1.BIOMETRIC_REJECTION_REASONS; } });
 //# sourceMappingURL=index.js.map

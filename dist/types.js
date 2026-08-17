@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = void 0;
+exports.BiometricNonDeterministicError = exports.BiometricCodeRejectedError = exports.BiometricUnavailableError = exports.BIOMETRIC_REJECTION_REASONS = exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = void 0;
 class VaultVersionUnsupportedError extends Error {
     code = 'VAULT_VERSION_UNSUPPORTED';
     vaultVersion;
@@ -51,4 +51,48 @@ class SecretsVaultVersionUnsupportedError extends Error {
     }
 }
 exports.SecretsVaultVersionUnsupportedError = SecretsVaultVersionUnsupportedError;
+/**
+ * Why the platform refused a Hello operation. The native provider maps
+ * HRESULTs to these; TypeScript never sees an HRESULT.
+ *
+ * Surfaced so the UI can stay quiet on a deliberate `cancelled` but say
+ * something useful on `device-locked` — the two need opposite treatment.
+ */
+exports.BIOMETRIC_REJECTION_REASONS = [
+    'cancelled',
+    'retries-exhausted',
+    'device-locked',
+    'not-found',
+];
+class BiometricUnavailableError extends Error {
+    code = 'BIOMETRIC_UNAVAILABLE';
+    constructor(message = 'Windows Hello indisponible sur ce poste') {
+        super(message);
+        this.name = 'BiometricUnavailableError';
+    }
+}
+exports.BiometricUnavailableError = BiometricUnavailableError;
+class BiometricCodeRejectedError extends Error {
+    code = 'BIOMETRIC_CODE_REJECTED';
+    constructor() {
+        super('Code incorrect — enrôlement biométrique refusé');
+        this.name = 'BiometricCodeRejectedError';
+    }
+}
+exports.BiometricCodeRejectedError = BiometricCodeRejectedError;
+/**
+ * Raised when the platform's Hello key does not sign deterministically, which
+ * makes the whole envelope unusable. Determinism was measured on one machine;
+ * another TPM could sign with a randomised scheme (RSA-PSS), and without this
+ * check enrolment would silently produce a blob that never decrypts.
+ */
+class BiometricNonDeterministicError extends Error {
+    code = 'BIOMETRIC_NON_DETERMINISTIC';
+    constructor() {
+        super('Windows Hello produit des signatures non déterministes sur ce poste ; ' +
+            'le déverrouillage biométrique ne peut pas être activé.');
+        this.name = 'BiometricNonDeterministicError';
+    }
+}
+exports.BiometricNonDeterministicError = BiometricNonDeterministicError;
 //# sourceMappingURL=types.js.map

@@ -1,8 +1,10 @@
-export declare const VERSION: "2.0.1";
+export declare const VERSION: "2.1.0";
 export { createAuthService, validateCode, normalizeAnswer, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST, SALT_LENGTH, CODE_MIN_LENGTH, VAULT_VERSION, SUPPORTED_VAULT_VERSIONS, LOCKOUT_THRESHOLD, LOCKOUT_DURATION_MS, DELAY_START_AT_ATTEMPT, DELAY_MAX_SECONDS, DEFAULT_LOCK_TIMEOUT_MINUTES, } from './auth-service';
 export type { AuthService } from './auth-service';
 export { createSecretsService, anonymizeKeyForLog, SECRETS_VAULT_VERSION, } from './secrets-service';
 export type { SecretsService } from './secrets-service';
+export { createBiometricService, BIOMETRIC_BLOB_VERSION, SUPPORTED_BIOMETRIC_BLOB_VERSIONS, DEFAULT_BIOMETRIC_KEY_NAME, } from './biometric-service';
+export type { BiometricService } from './biometric-service';
 export { createAuthState } from './auth-state';
 export type { AuthState, UnlockListener } from './auth-state';
 export { createGuardedHandle, NotUnlockedError, NOT_UNLOCKED_ERROR, isGuardedError, } from './guarded-handle';
@@ -17,6 +19,6 @@ export type { IdleWatcher, CreateIdleWatcherOpts } from './idle-watcher';
 export { migrateLocalAuthToShared, detectMigrationConflict, appendMigrationLog, BACKUP_SUFFIX, } from './migration';
 export type { MigrationResult, MigrationOutcome, MigrateLocalAuthToSharedOpts, DetectMigrationConflictOpts, } from './migration';
 export { RECOVERY_QUESTIONS, CUSTOM_QUESTION_MIN_LENGTH, RECOVERY_ANSWER_MIN_LENGTH, } from './recovery-questions';
-export type { LockoutStatus, AuthVault, SetupOpts, CreateAuthServiceOpts, SafeStorageLike, SecretsVault, CreateSecretsServiceOpts, SessionContent, SessionState, SessionFileEnvelope, CreateSessionServiceOpts, } from './types';
-export { VaultVersionUnsupportedError, VaultNotInitializedError, KeyNotAllowedError, DPAPIUnavailableError, SecretsVaultVersionUnsupportedError, } from './types';
+export type { LockoutStatus, AuthVault, SetupOpts, CreateAuthServiceOpts, SafeStorageLike, SecretsVault, CreateSecretsServiceOpts, SessionContent, SessionState, SessionFileEnvelope, CreateSessionServiceOpts, BiometricProviderLike, BiometricRejectionReason, BiometricBlob, BiometricAuthServiceLike, CreateBiometricServiceOpts, BiometricUnlockFailure, BiometricUnlockResult, } from './types';
+export { VaultVersionUnsupportedError, VaultNotInitializedError, KeyNotAllowedError, DPAPIUnavailableError, SecretsVaultVersionUnsupportedError, BiometricUnavailableError, BiometricCodeRejectedError, BiometricNonDeterministicError, BIOMETRIC_REJECTION_REASONS, } from './types';
 //# sourceMappingURL=index.d.ts.map

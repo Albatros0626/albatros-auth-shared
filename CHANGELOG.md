@@ -6,6 +6,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-17
+
+### Added
+
+- **Biometric unlock via Windows Hello** (`createBiometricService`). Opt-in,
+  additive, and off by default: an app that does not inject a provider behaves
+  exactly as before. `AuthService` is unchanged and `auth.vault` stays at v2,
+  so apps that have not been updated are unaffected.
+
+  The design rule that makes this safe: **Hello never replaces verification, it
+  restores the factor.** A Hello signature decrypts the stored app code, which
+  is then handed to the ordinary `verifyCode()`. PBKDF2, constant-time
+  comparison and the lockout counter all still apply, and exactly one code path
+  can declare the app unlocked.
+
+  Envelope: HKDF-SHA256 over the (deterministic) Hello signature derives a KEK;
+  the code is sealed with AES-256-GCM. Every cleartext field of the blob is
+  bound as additional authenticated data, so `boundTo` and `challenge` cannot be
+  forged by anyone with write access to the file.
+
+  Stored in `%LOCALAPPDATA%\AlbatrosApps\biometric.bin` — machine-local by
+  necessity, since the private key lives in the TPM and never leaves it.
+
+- `BiometricProviderLike` — the platform surface, injected exactly like
+  `SafeStorageLike`. The native Windows addon lives in its own package so
+  `auth-shared` keeps installing and testing without a C++ toolchain.
+
+- New errors: `BiometricUnavailableError`, `BiometricCodeRejectedError`,
+  `BiometricNonDeterministicError`.
+
+### Safeguards
+
+These are the rules that keep the feature from becoming a bypass:
+
+- **Staleness binding.** The blob records `last_code_change` at enrolment. If
+  the code has moved on, the blob is discarded *before* any prompt — otherwise
+  every biometric unlock would feed a superseded code to `verifyCode()` and lock
+  the user out after five attempts. Re-checked *after* the prompt too, since
+  another Albatros app can change the code during the seconds Hello is on
+  screen. The same double check protects `enroll()`: the change date is
+  snapshotted before the code is verified and re-checked before the blob is
+  written, so a concurrent `changeCode()` can never get a stale code sealed.
+- **Enrolment is lockout-aware.** `enroll()` refuses during an active lockout —
+  it validates through `verifyCurrentCode()` (which deliberately counts
+  nothing), so without this guard it would be a lockout-free brute-force
+  oracle. The README example additionally wires `auth:biometricEnroll` and
+  `auth:biometricDisable` through `guardedHandle`.
+- **A permanently missing Hello key discards the enrolment.** A `not-found`
+  from the platform (NGC/TPM reset) destroys the blob so the unlock button —
+  gated on `isEnrolled()` — vanishes on its own; transient refusals
+  (cancelled, sensor busy) keep it.
+- **The blob's own `keyName` is authoritative.** Unlock signs with — and
+  disable deletes — the key recorded (and AAD-authenticated) in the blob, so
+  two apps configured with different key names can share one enrolment without
+  destroying each other's.
+- **A failed decryption never reaches `verifyCode()`.** A wrong signature or a
+  tampered blob is not a failed authentication and must not consume an attempt.
+- **Lockout short-circuit.** While the vault is locked out, `unlock()` returns
+  immediately with the lockout status instead of asking the user for a finger
+  it already knows will be refused.
+- **Enrolment is all-or-nothing.** If any step fails after the key pair is
+  created, the key is removed — no orphan credential is left on the profile.
+- **Determinism is verified, not assumed.** Enrolment signs the same challenge
+  twice and refuses to proceed if the results differ, so a TPM using a
+  randomised signature scheme fails loudly at enrolment rather than producing a
+  blob that never decrypts.
+- **A blob written by a newer app is ignored, never deleted** — an older app
+  must not silently revoke an enrolment it does not understand.
+- **Concurrent `unlock()` calls are serialised** into a single prompt.
+
+### Tests
+
+- 44 new tests, all running against a fake provider — the suite still needs no
+  native module, no C++ toolchain and no biometric hardware. Coverage includes
+  tampered blobs (forged `boundTo`, swapped challenge, mutated ciphertext), the
+  code-changed-mid-prompt races on both unlock and enrolment, concurrent
+  unlocks, cancelled re-enrolment, divergent keyName configurations, and the
+  invalidation paths.
+
 ## [2.0.1] - 2026-05-05
 
 ### Fixed
