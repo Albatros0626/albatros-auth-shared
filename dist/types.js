@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BiometricNonDeterministicError = exports.BiometricCodeRejectedError = exports.BiometricUnavailableError = exports.BIOMETRIC_REJECTION_REASONS = exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = void 0;
+exports.BiometricNonDeterministicError = exports.BiometricCodeRejectedError = exports.BiometricUnavailableError = exports.BIOMETRIC_REJECTION_REASONS = exports.SecretsVaultVersionUnsupportedError = exports.DPAPIUnavailableError = exports.KeyNotAllowedError = exports.VaultLockedOutError = exports.VaultNotInitializedError = exports.VaultVersionUnsupportedError = void 0;
 class VaultVersionUnsupportedError extends Error {
     code = 'VAULT_VERSION_UNSUPPORTED';
     vaultVersion;
@@ -23,6 +23,21 @@ class VaultNotInitializedError extends Error {
     }
 }
 exports.VaultNotInitializedError = VaultNotInitializedError;
+/**
+ * Thrown by every secret-checking method while the lockout window is open.
+ *
+ * The message is unchanged from the ad-hoc `Error` that `recover()` threw
+ * before v3.0.0, so UIs matching on it keep working; the typed class simply
+ * lets callers branch without string comparison.
+ */
+class VaultLockedOutError extends Error {
+    code = 'VAULT_LOCKED_OUT';
+    constructor() {
+        super('Application verrouillée, réessayez plus tard');
+        this.name = 'VaultLockedOutError';
+    }
+}
+exports.VaultLockedOutError = VaultLockedOutError;
 class KeyNotAllowedError extends Error {
     code = 'KEY_NOT_ALLOWED';
     key;

@@ -111,6 +111,49 @@ function createAuthService(opts) {
             throw new types_1.VaultNotInitializedError();
         return v;
     }
+    function isLockedOut(vault) {
+        return !!vault.lockout_until && new Date(vault.lockout_until).getTime() > Date.now();
+    }
+    /**
+     * Refuses any secret check while the lockout window is open. Without this,
+     * a method that merely *counts* failures could still be hammered forever —
+     * the counter would climb past the threshold with no consequence.
+     */
+    function assertNotLockedOut(vault) {
+        if (isLockedOut(vault))
+            throw new types_1.VaultLockedOutError();
+    }
+    function registerFailure(vault) {
+        vault.failed_attempts += 1;
+        if (vault.failed_attempts >= exports.LOCKOUT_THRESHOLD) {
+            vault.lockout_until = new Date(Date.now() + exports.LOCKOUT_DURATION_MS).toISOString();
+        }
+        writeVault(vault);
+    }
+    function registerSuccess(vault) {
+        // Skip the write when there is nothing to clear: settings flows call these
+        // methods on every dialog, and a successful check is the common case.
+        if (vault.failed_attempts === 0 && vault.lockout_until === null)
+            return;
+        vault.failed_attempts = 0;
+        vault.lockout_until = null;
+        writeVault(vault);
+    }
+    /**
+     * Single verification primitive behind every secret check other than
+     * `verifyCode` (which keeps its own anti-timing derivation). Centralising it
+     * is what makes "no quiet verification path" enforceable rather than a rule
+     * each method has to remember.
+     */
+    async function checkSecret(vault, candidate, salt, storedHash) {
+        const hashCandidate = await derive(candidate, Buffer.from(salt, 'base64'));
+        const ok = constantTimeEqual(hashCandidate, Buffer.from(storedHash, 'base64'));
+        if (ok)
+            registerSuccess(vault);
+        else
+            registerFailure(vault);
+        return ok;
+    }
     return {
         isSetupComplete() {
             return (0, fs_1.existsSync)(vaultPath);
@@ -178,35 +221,23 @@ function createAuthService(opts) {
         },
         async verifyCurrentCode(code) {
             const vault = requireVault();
-            const hashCandidate = await derive(code, Buffer.from(vault.salt_code, 'base64'));
-            const hashStored = Buffer.from(vault.hash_code, 'base64');
-            return constantTimeEqual(hashCandidate, hashStored);
+            assertNotLockedOut(vault);
+            return checkSecret(vault, code, vault.salt_code, vault.hash_code);
         },
         async testRecovery(answer) {
             const vault = requireVault();
-            const normalized = normalizeAnswer(answer);
-            const hashCandidate = await derive(normalized, Buffer.from(vault.salt_recovery, 'base64'));
-            const hashStored = Buffer.from(vault.hash_recovery, 'base64');
-            return constantTimeEqual(hashCandidate, hashStored);
+            assertNotLockedOut(vault);
+            return checkSecret(vault, normalizeAnswer(answer), vault.salt_recovery, vault.hash_recovery);
         },
         async recover(answer, newCode) {
             const vault = requireVault();
-            if (vault.lockout_until && new Date(vault.lockout_until).getTime() > Date.now()) {
-                throw new Error('Application verrouillée, réessayez plus tard');
-            }
+            assertNotLockedOut(vault);
             const codeCheck = validateCode(newCode);
             if (!codeCheck.valid) {
                 throw new Error(codeCheck.reason);
             }
-            const normalized = normalizeAnswer(answer);
-            const hashCandidate = await derive(normalized, Buffer.from(vault.salt_recovery, 'base64'));
-            const hashStored = Buffer.from(vault.hash_recovery, 'base64');
-            if (!constantTimeEqual(hashCandidate, hashStored)) {
-                vault.failed_attempts += 1;
-                if (vault.failed_attempts >= exports.LOCKOUT_THRESHOLD) {
-                    vault.lockout_until = new Date(Date.now() + exports.LOCKOUT_DURATION_MS).toISOString();
-                }
-                writeVault(vault);
+            // checkSecret already recorded the failure (or cleared the counter).
+            if (!(await checkSecret(vault, normalizeAnswer(answer), vault.salt_recovery, vault.hash_recovery))) {
                 throw new Error('Réponse incorrecte');
             }
             const saltCode = (0, crypto_1.randomBytes)(exports.SALT_LENGTH);
@@ -220,11 +251,13 @@ function createAuthService(opts) {
         },
         async changeCode(oldCode, newCode) {
             const vault = requireVault();
-            const oldHash = await derive(oldCode, Buffer.from(vault.salt_code, 'base64'));
-            const stored = Buffer.from(vault.hash_code, 'base64');
-            if (!constantTimeEqual(oldHash, stored)) {
+            assertNotLockedOut(vault);
+            // checkSecret already recorded the failure (or cleared the counter).
+            if (!(await checkSecret(vault, oldCode, vault.salt_code, vault.hash_code))) {
                 throw new Error('Ancien code incorrect');
             }
+            // A weak *new* code is a validation error, not a failed authentication:
+            // the user proved who they are above, so it must not cost an attempt.
             const codeCheck = validateCode(newCode);
             if (!codeCheck.valid) {
                 throw new Error(codeCheck.reason);
@@ -234,13 +267,15 @@ function createAuthService(opts) {
             vault.salt_code = saltCode.toString('base64');
             vault.hash_code = hashCode.toString('base64');
             vault.last_code_change = new Date().toISOString();
+            vault.failed_attempts = 0;
+            vault.lockout_until = null;
             writeVault(vault);
         },
         async changeRecovery(currentCode, newQuestion, newAnswer) {
             const vault = requireVault();
-            const candidate = await derive(currentCode, Buffer.from(vault.salt_code, 'base64'));
-            const stored = Buffer.from(vault.hash_code, 'base64');
-            if (!constantTimeEqual(candidate, stored)) {
+            assertNotLockedOut(vault);
+            // checkSecret already recorded the failure (or cleared the counter).
+            if (!(await checkSecret(vault, currentCode, vault.salt_code, vault.hash_code))) {
                 throw new Error('Code actuel incorrect');
             }
             if (!newQuestion.trim() || newQuestion.trim().length < recovery_questions_1.CUSTOM_QUESTION_MIN_LENGTH) {

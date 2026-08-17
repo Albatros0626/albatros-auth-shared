@@ -1,4 +1,4 @@
-export const VERSION = '2.1.1' as const
+export const VERSION = '3.0.0' as const
 
 export {
   createAuthService,
@@ -114,6 +114,7 @@ export type {
 export {
   VaultVersionUnsupportedError,
   VaultNotInitializedError,
+  VaultLockedOutError,
   KeyNotAllowedError,
   DPAPIUnavailableError,
   SecretsVaultVersionUnsupportedError,

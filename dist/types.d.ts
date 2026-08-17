@@ -36,6 +36,17 @@ export declare class VaultNotInitializedError extends Error {
     readonly code = "VAULT_NOT_INITIALIZED";
     constructor();
 }
+/**
+ * Thrown by every secret-checking method while the lockout window is open.
+ *
+ * The message is unchanged from the ad-hoc `Error` that `recover()` threw
+ * before v3.0.0, so UIs matching on it keep working; the typed class simply
+ * lets callers branch without string comparison.
+ */
+export declare class VaultLockedOutError extends Error {
+    readonly code = "VAULT_LOCKED_OUT";
+    constructor();
+}
 export interface SafeStorageLike {
     isEncryptionAvailable(): boolean;
     encryptString(plain: string): Buffer;

@@ -8,7 +8,7 @@ Used by Prospector V2, Cadence, Candidate Manager and future apps. Unlocking one
 
 | Module | Purpose |
 |---|---|
-| `auth-service` | PBKDF2-SHA512 password / recovery question, anti-brute-force lockout, vault format v2 with auto-migration from v1 |
+| `auth-service` | PBKDF2-SHA512 password / recovery question, anti-brute-force lockout on **every** verification path, vault format v2 with auto-migration from v1 |
 | `secrets-service` | DPAPI-encrypted vault (Windows safeStorage / macOS Keychain / Linux libsecret) with per-app allowlist enforcement |
 | `biometric-service` | Optional Windows Hello unlock — a TPM-backed signature decrypts the stored code, which still goes through `verifyCode()` |
 | `auth-state` | In-memory unlock flag with `onUnlockChange` event subscriber |
@@ -387,7 +387,7 @@ import {
   RECOVERY_QUESTIONS, CUSTOM_QUESTION_MIN_LENGTH, RECOVERY_ANSWER_MIN_LENGTH,
 
   // Errors
-  VaultVersionUnsupportedError, VaultNotInitializedError,
+  VaultVersionUnsupportedError, VaultNotInitializedError, VaultLockedOutError,
   KeyNotAllowedError, DPAPIUnavailableError,
   SecretsVaultVersionUnsupportedError,
   BiometricUnavailableError, BiometricCodeRejectedError,
@@ -407,6 +407,32 @@ All the major types (`AuthService`, `SecretsService`, `SessionState`, `LockoutSt
 | `%LOCALAPPDATA%\AlbatrosApps\migration.log` | One-shot migration audit (JSONL) | yes |
 | `%APPDATA%\<app>\secrets.vault` | App-specific API keys (DPAPI-encrypted) | no |
 | `%APPDATA%\<app>\<other app data>` | Database, settings, etc. | no |
+
+## No quiet verification path
+
+Every method that checks a user-supplied secret — `verifyCode`,
+`verifyCurrentCode`, `testRecovery`, `recover`, `changeCode`,
+`changeRecovery` — honours the lockout window and counts its failures against
+one shared budget. There is no "just compare it" variant.
+
+That uniformity was learned the hard way. Until v3.0.0 the last four compared
+silently, on the assumption that callers would only reach them once unlocked.
+All three Albatros apps broke that assumption by exposing them on unguarded
+IPC channels, turning each into an unthrottled brute-force oracle reachable
+from a locked app. Three out of three is a library problem, not three
+independent mistakes.
+
+Two consequences worth knowing:
+
+- These methods now throw `VaultLockedOutError` during lockout. Settings
+  dialogs that call them need to surface it.
+- Mistyping the current code five times in a settings dialog locks the vault
+  for 30 minutes, as on the lock screen. A rejected *new* code does not count —
+  the user already proved identity, so that is validation, not authentication.
+
+Routing these channels through `guardedHandle` remains good practice as
+defence in depth, but is no longer the only thing preventing an unbounded
+oracle.
 
 ## Vault format versioning
 

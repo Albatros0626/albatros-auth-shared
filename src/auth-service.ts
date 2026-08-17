@@ -11,7 +11,11 @@ import type {
   LockoutStatus,
   SetupOpts,
 } from './types'
-import { VaultNotInitializedError, VaultVersionUnsupportedError } from './types'
+import {
+  VaultLockedOutError,
+  VaultNotInitializedError,
+  VaultVersionUnsupportedError,
+} from './types'
 
 const pbkdf2Async = promisify(pbkdf2)
 
@@ -84,14 +88,48 @@ export function validateCode(code: string): { valid: boolean; reason?: string } 
   return { valid: true }
 }
 
+/**
+ * Every method that checks a user-supplied secret — the code or the recovery
+ * answer — honours the lockout window and counts its failures. There is no
+ * "quiet" verification path.
+ *
+ * That uniformity is deliberate and was learned the hard way. Until v3.0.0,
+ * `verifyCurrentCode`, `testRecovery`, `changeCode` and `changeRecovery`
+ * compared secrets without touching `failed_attempts` or `lockout_until`, on
+ * the assumption that callers would only reach them from an already-unlocked
+ * context. All three Albatros apps broke that assumption by exposing them on
+ * unguarded IPC channels, turning each into an unthrottled brute-force oracle
+ * that bypassed the five attempts protecting `verifyCode`.
+ *
+ * The fix is deliberately structural rather than nominal: renaming them
+ * (`verifyCurrentCodeUnthrottled`…) would have made the hazard visible while
+ * leaving it callable, and would have protected only the apps that took the
+ * update. Making the guarantee intrinsic protects every caller, including the
+ * ones whose IPC wiring stays imperfect.
+ *
+ * Cost of that choice, accepted knowingly: mistyping the current code five
+ * times inside a settings dialog now locks the vault for 30 minutes, exactly
+ * as it does on the lock screen.
+ */
 export interface AuthService {
   isSetupComplete(): boolean
   setup(opts: SetupOpts): Promise<void>
+  /** Unlock path. Counts failures, refuses during lockout. */
   verifyCode(code: string): Promise<boolean>
+  /**
+   * Confirms the current code (settings flows). Counts failures and throws
+   * {@link VaultLockedOutError} during lockout — same policy as `verifyCode`.
+   */
   verifyCurrentCode(code: string): Promise<boolean>
+  /**
+   * Checks the recovery answer without consuming it. Counts failures and
+   * throws {@link VaultLockedOutError} during lockout.
+   */
   testRecovery(answer: string): Promise<boolean>
   recover(answer: string, newCode: string): Promise<void>
+  /** A wrong `oldCode` counts as a failed attempt. */
   changeCode(oldCode: string, newCode: string): Promise<void>
+  /** A wrong `currentCode` counts as a failed attempt. */
   changeRecovery(currentCode: string, newQuestion: string, newAnswer: string): Promise<void>
   getRecoveryQuestion(): string
   getLastCodeChangeDate(): string | null
@@ -139,6 +177,55 @@ export function createAuthService(opts: CreateAuthServiceOpts): AuthService {
     const v = readVault()
     if (!v) throw new VaultNotInitializedError()
     return v
+  }
+
+  function isLockedOut(vault: AuthVault): boolean {
+    return !!vault.lockout_until && new Date(vault.lockout_until).getTime() > Date.now()
+  }
+
+  /**
+   * Refuses any secret check while the lockout window is open. Without this,
+   * a method that merely *counts* failures could still be hammered forever —
+   * the counter would climb past the threshold with no consequence.
+   */
+  function assertNotLockedOut(vault: AuthVault): void {
+    if (isLockedOut(vault)) throw new VaultLockedOutError()
+  }
+
+  function registerFailure(vault: AuthVault): void {
+    vault.failed_attempts += 1
+    if (vault.failed_attempts >= LOCKOUT_THRESHOLD) {
+      vault.lockout_until = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString()
+    }
+    writeVault(vault)
+  }
+
+  function registerSuccess(vault: AuthVault): void {
+    // Skip the write when there is nothing to clear: settings flows call these
+    // methods on every dialog, and a successful check is the common case.
+    if (vault.failed_attempts === 0 && vault.lockout_until === null) return
+    vault.failed_attempts = 0
+    vault.lockout_until = null
+    writeVault(vault)
+  }
+
+  /**
+   * Single verification primitive behind every secret check other than
+   * `verifyCode` (which keeps its own anti-timing derivation). Centralising it
+   * is what makes "no quiet verification path" enforceable rather than a rule
+   * each method has to remember.
+   */
+  async function checkSecret(
+    vault: AuthVault,
+    candidate: string,
+    salt: string,
+    storedHash: string,
+  ): Promise<boolean> {
+    const hashCandidate = await derive(candidate, Buffer.from(salt, 'base64'))
+    const ok = constantTimeEqual(hashCandidate, Buffer.from(storedHash, 'base64'))
+    if (ok) registerSuccess(vault)
+    else registerFailure(vault)
+    return ok
   }
 
   return {
@@ -220,41 +307,27 @@ export function createAuthService(opts: CreateAuthServiceOpts): AuthService {
 
     async verifyCurrentCode(code: string): Promise<boolean> {
       const vault = requireVault()
-      const hashCandidate = await derive(code, Buffer.from(vault.salt_code, 'base64'))
-      const hashStored = Buffer.from(vault.hash_code, 'base64')
-      return constantTimeEqual(hashCandidate, hashStored)
+      assertNotLockedOut(vault)
+      return checkSecret(vault, code, vault.salt_code, vault.hash_code)
     },
 
     async testRecovery(answer: string): Promise<boolean> {
       const vault = requireVault()
-      const normalized = normalizeAnswer(answer)
-      const hashCandidate = await derive(normalized, Buffer.from(vault.salt_recovery, 'base64'))
-      const hashStored = Buffer.from(vault.hash_recovery, 'base64')
-      return constantTimeEqual(hashCandidate, hashStored)
+      assertNotLockedOut(vault)
+      return checkSecret(vault, normalizeAnswer(answer), vault.salt_recovery, vault.hash_recovery)
     },
 
     async recover(answer: string, newCode: string): Promise<void> {
       const vault = requireVault()
-
-      if (vault.lockout_until && new Date(vault.lockout_until).getTime() > Date.now()) {
-        throw new Error('Application verrouillée, réessayez plus tard')
-      }
+      assertNotLockedOut(vault)
 
       const codeCheck = validateCode(newCode)
       if (!codeCheck.valid) {
         throw new Error(codeCheck.reason)
       }
 
-      const normalized = normalizeAnswer(answer)
-      const hashCandidate = await derive(normalized, Buffer.from(vault.salt_recovery, 'base64'))
-      const hashStored = Buffer.from(vault.hash_recovery, 'base64')
-
-      if (!constantTimeEqual(hashCandidate, hashStored)) {
-        vault.failed_attempts += 1
-        if (vault.failed_attempts >= LOCKOUT_THRESHOLD) {
-          vault.lockout_until = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString()
-        }
-        writeVault(vault)
+      // checkSecret already recorded the failure (or cleared the counter).
+      if (!(await checkSecret(vault, normalizeAnswer(answer), vault.salt_recovery, vault.hash_recovery))) {
         throw new Error('Réponse incorrecte')
       }
 
@@ -270,13 +343,15 @@ export function createAuthService(opts: CreateAuthServiceOpts): AuthService {
 
     async changeCode(oldCode: string, newCode: string): Promise<void> {
       const vault = requireVault()
+      assertNotLockedOut(vault)
 
-      const oldHash = await derive(oldCode, Buffer.from(vault.salt_code, 'base64'))
-      const stored = Buffer.from(vault.hash_code, 'base64')
-      if (!constantTimeEqual(oldHash, stored)) {
+      // checkSecret already recorded the failure (or cleared the counter).
+      if (!(await checkSecret(vault, oldCode, vault.salt_code, vault.hash_code))) {
         throw new Error('Ancien code incorrect')
       }
 
+      // A weak *new* code is a validation error, not a failed authentication:
+      // the user proved who they are above, so it must not cost an attempt.
       const codeCheck = validateCode(newCode)
       if (!codeCheck.valid) {
         throw new Error(codeCheck.reason)
@@ -287,6 +362,8 @@ export function createAuthService(opts: CreateAuthServiceOpts): AuthService {
       vault.salt_code = saltCode.toString('base64')
       vault.hash_code = hashCode.toString('base64')
       vault.last_code_change = new Date().toISOString()
+      vault.failed_attempts = 0
+      vault.lockout_until = null
       writeVault(vault)
     },
 
@@ -296,10 +373,10 @@ export function createAuthService(opts: CreateAuthServiceOpts): AuthService {
       newAnswer: string,
     ): Promise<void> {
       const vault = requireVault()
+      assertNotLockedOut(vault)
 
-      const candidate = await derive(currentCode, Buffer.from(vault.salt_code, 'base64'))
-      const stored = Buffer.from(vault.hash_code, 'base64')
-      if (!constantTimeEqual(candidate, stored)) {
+      // checkSecret already recorded the failure (or cleared the counter).
+      if (!(await checkSecret(vault, currentCode, vault.salt_code, vault.hash_code))) {
         throw new Error('Code actuel incorrect')
       }
 

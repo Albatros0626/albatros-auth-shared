@@ -11,7 +11,11 @@ import {
   DEFAULT_LOCK_TIMEOUT_MINUTES,
   type AuthService,
 } from './auth-service'
-import { VaultNotInitializedError, VaultVersionUnsupportedError } from './types'
+import {
+  VaultLockedOutError,
+  VaultNotInitializedError,
+  VaultVersionUnsupportedError,
+} from './types'
 
 const TEST_DIR = path.join(tmpdir(), `auth-shared-test-${process.pid}-${Date.now()}`)
 
@@ -222,7 +226,7 @@ describe('verifyCode', () => {
   })
 })
 
-describe('verifyCurrentCode (does not touch counter)', () => {
+describe('verifyCurrentCode (throttled like verifyCode)', () => {
   beforeEach(async () => {
     await svc.setup({ code: 'mypass1', recoveryQuestion: 'Ma question secrète ?', recoveryAnswer: 'ma-reponse' })
   })
@@ -231,10 +235,30 @@ describe('verifyCurrentCode (does not touch counter)', () => {
     expect(await svc.verifyCurrentCode('mypass1')).toBe(true)
   })
 
-  it('returns false for wrong code without decrementing counter', async () => {
+  // Until v3.0.0 this method compared silently. Exposed on an unguarded IPC
+  // channel — which all three Albatros apps did — that made it an unthrottled
+  // brute-force oracle bypassing the five attempts protecting verifyCode.
+  it('counts wrong codes against the lockout budget', async () => {
     await svc.verifyCurrentCode('wrong1')
     await svc.verifyCurrentCode('wrong2')
     await svc.verifyCurrentCode('wrong3')
+    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD - 3)
+  })
+
+  it('locks the vault after the threshold, then refuses outright', async () => {
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
+      await svc.verifyCurrentCode(`wrong${i}`)
+    }
+    expect(svc.getLockoutStatus().locked_until).not.toBeNull()
+    // Refusing (rather than merely returning false) is what stops the oracle:
+    // a counter alone would keep climbing with no consequence.
+    await expect(svc.verifyCurrentCode('mypass1')).rejects.toBeInstanceOf(VaultLockedOutError)
+  })
+
+  it('clears the counter on a correct code', async () => {
+    await svc.verifyCurrentCode('wrong1')
+    await svc.verifyCurrentCode('wrong2')
+    expect(await svc.verifyCurrentCode('mypass1')).toBe(true)
     expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD)
   })
 
@@ -375,10 +399,79 @@ describe('recover', () => {
 })
 
 // =============================================================================
-// testRecovery (read-only)
+// Aucun chemin de vérification silencieux
 // =============================================================================
 
-describe('testRecovery (does not consume attempt)', () => {
+describe('no quiet verification path', () => {
+  beforeEach(async () => {
+    await svc.setup({ code: 'mypass1', recoveryQuestion: 'Ma question secrète ?', recoveryAnswer: 'ma-reponse' })
+  })
+
+  it('changeCode counts a wrong old code', async () => {
+    await expect(svc.changeCode('wrong1', 'newpass9')).rejects.toThrow('Ancien code incorrect')
+    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD - 1)
+  })
+
+  it('changeCode does NOT count a weak new code', async () => {
+    // The user already proved identity with the old code; a rejected new code
+    // is a validation error and must not cost an attempt.
+    await expect(svc.changeCode('mypass1', '123456')).rejects.toThrow()
+    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD)
+  })
+
+  it('changeCode refuses while locked out', async () => {
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
+      await expect(svc.changeCode(`wrong${i}`, 'newpass9')).rejects.toThrow()
+    }
+    await expect(svc.changeCode('mypass1', 'newpass9')).rejects.toBeInstanceOf(VaultLockedOutError)
+  })
+
+  it('changeCode clears the counter on success', async () => {
+    await expect(svc.changeCode('wrong1', 'newpass9')).rejects.toThrow()
+    await svc.changeCode('mypass1', 'newpass9')
+    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD)
+    expect(await svc.verifyCode('newpass9')).toBe(true)
+  })
+
+  it('changeRecovery counts a wrong current code', async () => {
+    await expect(
+      svc.changeRecovery('wrong1', 'Nouvelle question ?', 'nouvelle-reponse'),
+    ).rejects.toThrow('Code actuel incorrect')
+    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD - 1)
+  })
+
+  it('changeRecovery refuses while locked out', async () => {
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
+      await expect(svc.verifyCurrentCode(`wrong${i}`)).resolves.toBe(false)
+    }
+    await expect(
+      svc.changeRecovery('mypass1', 'Nouvelle question ?', 'nouvelle-reponse'),
+    ).rejects.toBeInstanceOf(VaultLockedOutError)
+  })
+
+  it('recover refuses while locked out with the same typed error', async () => {
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
+      await expect(svc.verifyCurrentCode(`wrong${i}`)).resolves.toBe(false)
+    }
+    await expect(svc.recover('ma-reponse', 'newpass9')).rejects.toBeInstanceOf(VaultLockedOutError)
+  })
+
+  // The whole point of the v3.0.0 change: the budget is shared, so an attacker
+  // cannot reset it by switching methods.
+  it('shares one attempt budget across every verification method', async () => {
+    await svc.verifyCurrentCode('wrong1')
+    await svc.testRecovery('mauvaise')
+    await expect(svc.changeCode('wrong3', 'newpass9')).rejects.toThrow()
+    await svc.verifyCode('wrong4')
+    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD - 4)
+  })
+})
+
+// =============================================================================
+// testRecovery (throttled)
+// =============================================================================
+
+describe('testRecovery (throttled)', () => {
   beforeEach(async () => {
     await svc.setup({ code: 'mypass1', recoveryQuestion: 'Ma question secrète ?', recoveryAnswer: 'ÉLÉPHANT rose' })
   })
@@ -387,12 +480,14 @@ describe('testRecovery (does not consume attempt)', () => {
     expect(await svc.testRecovery('elephant ROSE')).toBe(true)
   })
 
-  it('returns false for wrong answer without touching counter', { timeout: 60_000 }, async () => {
-    for (let i = 0; i < 10; i++) {
+  // Same reasoning as verifyCurrentCode: an unthrottled check is an oracle on
+  // the recovery answer, which is a full credential — it can reset the code.
+  it('counts wrong answers and locks out at the threshold', { timeout: 60_000 }, async () => {
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
       await svc.testRecovery(`mauvaise ${i}`)
     }
-    expect(svc.getLockoutStatus().attempts_remaining).toBe(LOCKOUT_THRESHOLD)
-    expect(svc.getLockoutStatus().locked_until).toBeNull()
+    expect(svc.getLockoutStatus().locked_until).not.toBeNull()
+    await expect(svc.testRecovery('elephant ROSE')).rejects.toBeInstanceOf(VaultLockedOutError)
   })
 
   it('throws if vault missing', async () => {

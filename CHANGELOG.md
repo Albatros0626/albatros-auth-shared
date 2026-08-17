@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-17
+
+### Changed — BREAKING (behaviour, not API)
+
+- **No quiet verification path.** `verifyCurrentCode`, `testRecovery`,
+  `changeCode` and `changeRecovery` now honour the lockout window and count
+  their failures, exactly like `verifyCode` and `recover` already did. The
+  method signatures are unchanged, so adopting this is a one-line version bump
+  — but the runtime behaviour changes, hence the major.
+
+  **Why.** Until now those four compared secrets in constant time without
+  touching `failed_attempts` or `lockout_until`, on the assumption that callers
+  would only reach them from an already-unlocked context. All three Albatros
+  apps broke that assumption by exposing them on unguarded IPC channels. Each
+  was therefore an unthrottled brute-force oracle running at PBKDF2 speed,
+  reachable from a locked app, bypassing entirely the five attempts that
+  protect `verifyCode`. Three out of three is not a local slip: the library
+  offered no intrinsic protection and nothing in the names or types said so.
+
+  **Why not a rename.** `verifyCurrentCodeUnthrottled` was considered and
+  rejected. It makes the hazard visible but leaves it callable, still relying
+  on each developer drawing the right conclusion — and it protects only the
+  apps that take the update. Making the guarantee intrinsic protects every
+  caller, including those whose IPC wiring stays imperfect.
+
+  **Cost, accepted knowingly.** Mistyping the current code five times inside a
+  settings dialog now locks the vault for 30 minutes, as it does on the lock
+  screen. Weak-new-code rejections in `changeCode` do *not* count: the user
+  already proved identity, so that is a validation error, not a failed
+  authentication.
+
+- **The attempt budget is shared across every method.** An attacker cannot
+  reset it by switching from `verifyCode` to `changeCode`.
+
+### Added
+
+- `VaultLockedOutError`, thrown by every secret check while the lockout window
+  is open. Refusing outright matters: a counter alone would keep climbing with
+  no consequence, leaving the oracle open. The message is unchanged from the
+  ad-hoc `Error` that `recover()` threw before, so UIs matching on it keep
+  working; the typed class simply removes the need for string comparison.
+
+### Migration
+
+No code changes required in consuming apps — bump the tag and reinstall. Two
+things to review:
+
+- Surface `VaultLockedOutError` in settings dialogs that call `changeCode`,
+  `changeRecovery`, `verifyCurrentCode` or `testRecovery`; they can now be
+  refused where previously they always ran.
+- The IPC hardening applied in the apps (routing these four through
+  `guardedHandle`) stays worthwhile as defence in depth, but is no longer the
+  only thing standing between a locked renderer and an unbounded oracle.
+
+### Tests
+
+- 91 tests (10 new), covering the shared budget across methods, the refusal
+  during lockout, the counter reset on success, and the deliberate exemption
+  of weak-new-code validation.
+
 ## [2.1.1] - 2026-08-17
 
 ### Added
