@@ -198,14 +198,15 @@ still apply, and exactly one code path can declare the app unlocked.
 
 ```ts
 import { createBiometricService } from '@albatros/auth-shared'
-import { createWindowsHelloProvider } from '@albatros/win-hello' // native, Windows only
+// pnpm add github:Albatros0626/albatros-win-hello#v1.0.0
+import { createWindowsHelloProvider, isSupportedPlatform } from '@albatros/win-hello'
 
 const biometricService = createBiometricService({
   blobPath: path.join(sharedDir, 'biometric.bin'),
   authService,
   // Omit or pass null on platforms without a provider — every call then
   // reports "unavailable" instead of forcing null checks at each call site.
-  provider: process.platform === 'win32' ? createWindowsHelloProvider() : null,
+  provider: isSupportedPlatform() ? createWindowsHelloProvider() : null,
 })
 
 // Unlock — NOT guarded, like auth:verifyCode (reachable while locked).
@@ -278,6 +279,31 @@ Failure handling:
 | `stale` / `key-mismatch` | "Your code changed — re-enable Windows Hello in settings" |
 | `code-refused` | show `result.lockoutStatus`, as for a rejected code |
 | `not-enrolled` | should not happen: the button was hidden |
+
+A hook in the `/react` subpath wires the button:
+
+```tsx
+import { useBiometricUnlock } from '@albatros/auth-shared/react'
+
+const { pending, trigger, failure } = useBiometricUnlock({
+  unlock: () => window.electronAPI.auth.biometricUnlock(),
+  onUnlocked: () => navigate('/'),
+})
+
+{enrolled && (
+  <button onClick={trigger} disabled={pending}>
+    {pending ? 'Vérification…' : 'Windows Hello'}
+  </button>
+)}
+```
+
+It covers the parts that are easy to get subtly wrong: it never fires on
+mount, ignores a second click while a prompt is up, reads the latest callbacks
+through refs, turns an IPC-level throw into a `rejected` result instead of an
+unhandled rejection inside an event handler, and drops any result landing
+after unmount — so a user who typed their code and moved on is not yanked back
+by a late Hello success. Writing the button without it is perfectly fine; it
+is a few lines of `useState`.
 
 ### Settings
 

@@ -11,6 +11,7 @@
  * React is declared as an optional peer dependency — only consumers of this
  * subpath need it installed.
  */
+import type { BiometricUnlockResult } from './types';
 export interface UseIdleLockOpts {
     /**
      * Idle timeout in minutes. Pass `0` (or negative) to disable the hook —
@@ -34,4 +35,44 @@ export interface UseIdleLockOpts {
  * the latest references via refs internally.
  */
 export declare function useIdleLock(opts: UseIdleLockOpts): void;
+export interface UseBiometricUnlockOpts {
+    /**
+     * Calls the main process, typically
+     * `window.electronAPI.auth.biometricUnlock()`. Takes no argument: the window
+     * handle Windows Hello needs is resolved in the main process from the IPC
+     * sender, never in the renderer.
+     */
+    unlock: () => Promise<BiometricUnlockResult>;
+    /** Called once the vault actually unlocked. */
+    onUnlocked?: () => void;
+}
+export interface UseBiometricUnlockState {
+    /** True while the Hello prompt is up. Measured 0.3s–5.6s in practice. */
+    pending: boolean;
+    /** Fires the prompt. A second call while pending is ignored. */
+    trigger: () => void;
+    /** Result of the last failed attempt; cleared when a new one starts. */
+    failure: BiometricUnlockResult | null;
+}
+/**
+ * Drives a "Windows Hello" button next to the code field on a lock screen.
+ *
+ * Deliberately manual: never call `trigger` on mount. A prompt raised as the
+ * screen appears often has no foreground yet, which is exactly the condition
+ * that makes Windows return `WINBIO_E_INVALID_TICKET`; a click guarantees the
+ * focus.
+ *
+ * The code field must stay usable while `pending` — the first path to succeed
+ * wins. Blocking it would trap the user if Hello never answers, so this hook
+ * discards a late biometric result instead: only the most recent `trigger`
+ * can settle the state, and results arriving after unmount are dropped.
+ *
+ * ```tsx
+ * const { pending, trigger, failure } = useBiometricUnlock({
+ *   unlock: () => window.electronAPI.auth.biometricUnlock(),
+ *   onUnlocked: () => navigate('/'),
+ * })
+ * ```
+ */
+export declare function useBiometricUnlock(opts: UseBiometricUnlockOpts): UseBiometricUnlockState;
 //# sourceMappingURL=react.d.ts.map

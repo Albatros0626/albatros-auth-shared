@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { renderHook } from '@testing-library/react'
-import { useIdleLock } from './react'
+import { renderHook, act, waitFor } from '@testing-library/react'
+import { useIdleLock, useBiometricUnlock } from './react'
+import type { BiometricUnlockResult } from './types'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -104,5 +105,136 @@ describe('useIdleLock', () => {
 
     // The ref should have captured the LATEST onLock → tag 'second'
     expect(calls).toEqual(['second'])
+  })
+})
+
+// =============================================================================
+// useBiometricUnlock
+// =============================================================================
+
+/** A pending unlock the test settles by hand, mimicking the Hello prompt. */
+function deferredUnlock() {
+  let settle!: (r: BiometricUnlockResult) => void
+  let calls = 0
+  const unlock = (): Promise<BiometricUnlockResult> => {
+    calls += 1
+    return new Promise<BiometricUnlockResult>((resolve) => { settle = resolve })
+  }
+  return {
+    unlock,
+    resolveWith: (r: BiometricUnlockResult) => act(async () => { settle(r) }),
+    get calls() { return calls },
+  }
+}
+
+describe('useBiometricUnlock', () => {
+  it('never prompts on mount — the prompt must follow a click', () => {
+    // A prompt raised without foreground is what triggers
+    // WINBIO_E_INVALID_TICKET; only a click guarantees focus.
+    const d = deferredUnlock()
+    const { result } = renderHook(() => useBiometricUnlock({ unlock: d.unlock }))
+
+    expect(d.calls).toBe(0)
+    expect(result.current.pending).toBe(false)
+  })
+
+  it('reports pending while the prompt is up, and clears it on success', async () => {
+    const d = deferredUnlock()
+    const onUnlocked = vi.fn()
+    const { result } = renderHook(() => useBiometricUnlock({ unlock: d.unlock, onUnlocked }))
+
+    act(() => { result.current.trigger() })
+    expect(result.current.pending).toBe(true)
+
+    await d.resolveWith({ ok: true })
+    await waitFor(() => expect(result.current.pending).toBe(false))
+    expect(onUnlocked).toHaveBeenCalledTimes(1)
+    expect(result.current.failure).toBeNull()
+  })
+
+  it('exposes the failure without calling onUnlocked', async () => {
+    const d = deferredUnlock()
+    const onUnlocked = vi.fn()
+    const { result } = renderHook(() => useBiometricUnlock({ unlock: d.unlock, onUnlocked }))
+
+    act(() => { result.current.trigger() })
+    await d.resolveWith({ ok: false, failure: 'rejected', reason: 'cancelled' })
+
+    await waitFor(() => expect(result.current.pending).toBe(false))
+    expect(result.current.failure).toMatchObject({ failure: 'rejected', reason: 'cancelled' })
+    expect(onUnlocked).not.toHaveBeenCalled()
+  })
+
+  it('ignores a second trigger while one is pending', async () => {
+    const d = deferredUnlock()
+    const { result } = renderHook(() => useBiometricUnlock({ unlock: d.unlock }))
+
+    act(() => { result.current.trigger() })
+    act(() => { result.current.trigger() })
+
+    // One click, one prompt — a double-click must not race two Hello dialogs.
+    expect(d.calls).toBe(1)
+    await d.resolveWith({ ok: true })
+  })
+
+  it('clears a previous failure when a new attempt starts', async () => {
+    const d1 = deferredUnlock()
+    const { result, rerender } = renderHook(
+      ({ u }: { u: () => Promise<BiometricUnlockResult> }) => useBiometricUnlock({ unlock: u }),
+      { initialProps: { u: d1.unlock } },
+    )
+
+    act(() => { result.current.trigger() })
+    await d1.resolveWith({ ok: false, failure: 'rejected', reason: 'cancelled' })
+    await waitFor(() => expect(result.current.failure).not.toBeNull())
+
+    const d2 = deferredUnlock()
+    rerender({ u: d2.unlock })
+    act(() => { result.current.trigger() })
+    expect(result.current.failure).toBeNull()
+    await d2.resolveWith({ ok: true })
+  })
+
+  it('uses the LATEST unlock callback, not the mount-time closure', async () => {
+    const d1 = deferredUnlock()
+    const d2 = deferredUnlock()
+    const { result, rerender } = renderHook(
+      ({ u }: { u: () => Promise<BiometricUnlockResult> }) => useBiometricUnlock({ unlock: u }),
+      { initialProps: { u: d1.unlock } },
+    )
+
+    rerender({ u: d2.unlock })
+    act(() => { result.current.trigger() })
+
+    expect(d1.calls).toBe(0)
+    expect(d2.calls).toBe(1)
+    await d2.resolveWith({ ok: true })
+  })
+
+  it('surfaces an IPC-level throw as a rejection instead of letting it escape', async () => {
+    const unlock = vi.fn().mockRejectedValue(new Error('IPC channel closed'))
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onUnlocked = vi.fn()
+    const { result } = renderHook(() => useBiometricUnlock({ unlock, onUnlocked }))
+
+    await act(async () => { result.current.trigger() })
+
+    await waitFor(() => expect(result.current.pending).toBe(false))
+    expect(result.current.failure).toMatchObject({ failure: 'rejected', reason: 'unknown' })
+    expect(onUnlocked).not.toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
+  it('drops a result that lands after unmount', async () => {
+    const d = deferredUnlock()
+    const onUnlocked = vi.fn()
+    const { result, unmount } = renderHook(() => useBiometricUnlock({ unlock: d.unlock, onUnlocked }))
+
+    act(() => { result.current.trigger() })
+    unmount()
+    // The user typed their code and moved on while Hello was still up.
+    await d.resolveWith({ ok: true })
+
+    expect(onUnlocked).not.toHaveBeenCalled()
   })
 })

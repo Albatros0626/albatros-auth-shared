@@ -12,8 +12,9 @@
  * subpath need it installed.
  */
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { attachActivityTracking } from './activity-listener'
+import type { BiometricUnlockResult } from './types'
 
 export interface UseIdleLockOpts {
   /**
@@ -57,4 +58,108 @@ export function useIdleLock(opts: UseIdleLockOpts): void {
       onActivity: () => onActivityRef.current?.(),
     })
   }, [timeoutMinutes])
+}
+
+export interface UseBiometricUnlockOpts {
+  /**
+   * Calls the main process, typically
+   * `window.electronAPI.auth.biometricUnlock()`. Takes no argument: the window
+   * handle Windows Hello needs is resolved in the main process from the IPC
+   * sender, never in the renderer.
+   */
+  unlock: () => Promise<BiometricUnlockResult>
+  /** Called once the vault actually unlocked. */
+  onUnlocked?: () => void
+}
+
+export interface UseBiometricUnlockState {
+  /** True while the Hello prompt is up. Measured 0.3s–5.6s in practice. */
+  pending: boolean
+  /** Fires the prompt. A second call while pending is ignored. */
+  trigger: () => void
+  /** Result of the last failed attempt; cleared when a new one starts. */
+  failure: BiometricUnlockResult | null
+}
+
+/**
+ * Drives a "Windows Hello" button next to the code field on a lock screen.
+ *
+ * Deliberately manual: never call `trigger` on mount. A prompt raised as the
+ * screen appears often has no foreground yet, which is exactly the condition
+ * that makes Windows return `WINBIO_E_INVALID_TICKET`; a click guarantees the
+ * focus.
+ *
+ * The code field must stay usable while `pending` — the first path to succeed
+ * wins. Blocking it would trap the user if Hello never answers, so this hook
+ * discards a late biometric result instead: only the most recent `trigger`
+ * can settle the state, and results arriving after unmount are dropped.
+ *
+ * ```tsx
+ * const { pending, trigger, failure } = useBiometricUnlock({
+ *   unlock: () => window.electronAPI.auth.biometricUnlock(),
+ *   onUnlocked: () => navigate('/'),
+ * })
+ * ```
+ */
+export function useBiometricUnlock(opts: UseBiometricUnlockOpts): UseBiometricUnlockState {
+  const { unlock, onUnlocked } = opts
+
+  const unlockRef = useRef(unlock)
+  const onUnlockedRef = useRef(onUnlocked)
+  useEffect(() => {
+    unlockRef.current = unlock
+    onUnlockedRef.current = onUnlocked
+  }, [unlock, onUnlocked])
+
+  const [pending, setPending] = useState(false)
+  const [failure, setFailure] = useState<BiometricUnlockResult | null>(null)
+
+  // Generation token: only the newest attempt may settle state. Guards both
+  // the double-click race and a result landing after unmount.
+  const generationRef = useRef(0)
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      generationRef.current += 1
+    }
+  }, [])
+
+  const pendingRef = useRef(false)
+
+  const trigger = useCallback(() => {
+    if (pendingRef.current) return
+    pendingRef.current = true
+    generationRef.current += 1
+    const generation = generationRef.current
+
+    setPending(true)
+    setFailure(null)
+
+    void (async () => {
+      let result: BiometricUnlockResult
+      try {
+        result = await unlockRef.current()
+      } catch (err) {
+        // An IPC-level failure is not a biometric verdict; surface it as a
+        // refusal rather than letting it escape an event handler unhandled.
+        // eslint-disable-next-line no-console
+        console.error('[biometric] unlock call failed:', err)
+        result = { ok: false, failure: 'rejected', reason: 'unknown' }
+      }
+
+      pendingRef.current = false
+      if (!mountedRef.current || generation !== generationRef.current) return
+
+      setPending(false)
+      if (result.ok) {
+        onUnlockedRef.current?.()
+      } else {
+        setFailure(result)
+      }
+    })()
+  }, [])
+
+  return { pending, trigger, failure }
 }

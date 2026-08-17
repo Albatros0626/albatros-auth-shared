@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-08-17
+
+### Added
+
+- **`useBiometricUnlock`** in the `@albatros/auth-shared/react` subpath —
+  drives the "Windows Hello" button beside the code field. Covers the parts
+  that are easy to get subtly wrong: never fires on mount (a prompt raised
+  without foreground is what produces `WINBIO_E_INVALID_TICKET`), ignores a
+  second click while a prompt is up, reads the latest callbacks through refs,
+  turns an IPC-level throw into a `rejected` result rather than an unhandled
+  rejection inside an event handler, and drops a result landing after unmount
+  so a user who typed their code and moved on is not yanked back by a late
+  Hello success.
+
+  Optional: the button can be written without it.
+
+### Tests
+
+- 8 new tests for the hook (14 in `react.test.tsx`), including the
+  double-click race, the stale-closure trap and the post-unmount result.
+  321 tests total.
+
+### Notes
+
+- The Windows Hello provider this feature needs now exists as a separate
+  package: `github:Albatros0626/albatros-win-hello#v1.0.0`. Until an app
+  injects it, `isSupported()` returns false and the unlock button never
+  appears — the feature is inert but harmless.
+
 ## [2.1.0] - 2026-08-17
 
 ### Added
