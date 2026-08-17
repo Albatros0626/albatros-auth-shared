@@ -117,8 +117,14 @@ function makeAuth(): FakeAuth {
       return ok
     },
 
+    // Mirrors the real service since v3.0.0: there is no quiet verification
+    // path, so a wrong code costs an attempt here too. Keeping the double
+    // faithful matters — an over-permissive fake would let the enrolment flow
+    // look cheaper than it is.
     async verifyCurrentCode(code: string): Promise<boolean> {
-      return code === a.currentCode
+      const ok = code === a.currentCode
+      if (!ok) a.failedAttempts += 1
+      return ok
     },
 
     getLastCodeChangeDate(): string | null {
@@ -230,9 +236,12 @@ describe('enroll + unlock', () => {
 // =============================================================================
 
 describe('enroll refusals', () => {
-  it('rejects a wrong code without touching the lockout counter', async () => {
+  it('rejects a wrong code, which costs an attempt like any authentication', async () => {
     await expect(svc.enroll('wrong-code', HWND)).rejects.toBeInstanceOf(BiometricCodeRejectedError)
-    expect(auth.failedAttempts).toBe(0)
+    // Since v3.0.0 verifyCurrentCode counts its failures, so enrolling with a
+    // wrong code is throttled like every other secret check. No prompt is
+    // raised and nothing is written.
+    expect(auth.failedAttempts).toBe(1)
     expect(auth.verifyCodeCalls).toHaveLength(0)
     expect(existsSync(blobPath)).toBe(false)
     expect(provider.createCalls).toBe(0)
@@ -267,8 +276,9 @@ describe('enroll refusals', () => {
   })
 
   it('refuses to enrol while the vault is locked out', async () => {
-    // Without this guard, enroll() would be a lockout-free brute-force
-    // oracle: verifyCurrentCode neither counts attempts nor checks lockout.
+    // Since v3.0.0 verifyCurrentCode refuses during lockout on its own, so
+    // this check is defence in depth: it fails fast, before any PBKDF2 work
+    // and before a Hello prompt the user would answer for nothing.
     auth.lockedUntil = '2099-01-01T00:00:00.000Z'
 
     await expect(svc.enroll(CODE, HWND)).rejects.toThrow('Application verrouillée')

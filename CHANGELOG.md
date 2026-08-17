@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-08-17
+
+### Tests
+
+- The `BiometricAuthServiceLike` double used by `biometric-service.test.ts`
+  still modelled the pre-v3.0.0 semantics: its `verifyCurrentCode` compared
+  silently. Production code was unaffected — the biometric service does not
+  care whether the call counts — but the test asserted that enrolling with a
+  wrong code was free, and a comment still claimed `verifyCurrentCode` "neither
+  counts attempts nor checks lockout". Both now match the real service, so the
+  double cannot make the enrolment flow look cheaper than it is.
+
 ## [3.0.0] - 2026-08-17
 
 ### Changed — BREAKING (behaviour, not API)
