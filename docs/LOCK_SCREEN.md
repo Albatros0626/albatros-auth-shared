@@ -132,6 +132,8 @@ Un bouton grisé annoncerait une fonctionnalité qu'on ne peut pas activer depui
 
 ## Hors périmètre
 
-- **Thème clair/sombre de l'écran** : décision non tranchée, comportement actuel de
-  chaque application conservé. À harmoniser un jour, dans les deux sens possibles.
+- **Thème clair/sombre de l'écran** : **volontairement non harmonisé** (décidé le
+  18/08/2026). Chaque application conserve le comportement qu'elle avait déjà. Ce
+  n'est pas un oubli et ce n'est plus une question ouverte : ne pas y revenir sans
+  demande explicite.
 - **L'écran de récupération** (question/réponse) : hors de cette spec.
