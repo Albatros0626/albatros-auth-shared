@@ -2,7 +2,7 @@
 
 Shared application-level authentication, secrets vault and cross-app session sync for Albatros desktop apps (Electron).
 
-Used by Prospector V2, Cadence, Candidate Manager and future apps. Unlocking one app unlocks the others; auto-lock and the master password are mutualized; per-app secrets stay separate.
+Used by Prospector V2, Cadence, Candidate Manager, Mémoire BM and future apps. Unlocking one app unlocks the others; auto-lock and the master password are mutualized; per-app secrets stay separate.
 
 ## What's inside
 
@@ -14,14 +14,15 @@ Used by Prospector V2, Cadence, Candidate Manager and future apps. Unlocking one
 | `auth-state` | In-memory unlock flag with `onUnlockChange` event subscriber |
 | `guarded-handle` | IPC wrapper that rejects calls with `NOT_UNLOCKED_ERROR` while locked |
 | `session-service` | Shared `session.bin` (DPAPI-encrypted) so unlocking one app unlocks the others |
-| `activity-tracker` | Generic idle detector (env-agnostic) for the renderer's `useIdleLock` hook |
+| `activity-tracker` | Low-level idle timer, main entry only. The renderer uses `useIdleLock` (`/react`) or `attachActivityTracking` (`/browser`) |
 | `idle-watcher` | Main-side watcher: polls session expiration + listens to cross-app locks |
+| `request-lock` | Main-side answer to the renderer's inactivity lock request: granted only once no Albatros app has been active within the timeout |
 | `migration` | One-shot legacy-to-shared vault migration helpers |
 
 ## Install
 
 ```bash
-pnpm add github:Albatros0626/albatros-auth-shared#v1.0.0
+pnpm add github:Albatros0626/albatros-auth-shared#v4.0.0
 ```
 
 `dist/` is committed to the repo, so consumer apps install zero-config (no `prepare` script, no `onlyBuiltDependencies` allowlist needed).
@@ -38,6 +39,7 @@ import {
   createGuardedHandle,
   createSessionService,
   createIdleWatcher,
+  createRequestLockHandler,
   migrateLocalAuthToShared,
   detectMigrationConflict,
 } from '@albatros/auth-shared'
@@ -120,10 +122,15 @@ ipcMain.handle('auth:verifyCode', async (_e, code: string) => {
   return { ok, lockoutStatus: authService.getLockoutStatus() }
 })
 
+// Manual "Lock" button: unconditional, the user asked for it
 ipcMain.handle('auth:lock', () => {
   sessionService.recordLock()
   authState.setUnlocked(false)
 })
+
+// The renderer's idle timer (useIdleLock): refused while another Albatros
+// app is active. Never answer it with auth:lock (TROUBLESHOOTING Bug #4, #5)
+ipcMain.handle('auth:requestLock', createRequestLockHandler({ sessionService, authState }))
 
 ipcMain.handle('auth:recordActivity', () => {
   sessionService.recordActivity()
@@ -136,55 +143,23 @@ guardedHandle('contacts:getAll', async () => {
 
 ## Integration example (renderer — React hook)
 
-The package does NOT include React. Each app writes a ~15-line hook around `createActivityTracker`:
+Import the hook from the `/react` subpath (React is an optional peer
+dependency). Do not write a local copy around a lower-level timer: that is how
+Mémoire BM brought back the cross-app lock cascade (TROUBLESHOOTING Bug #5).
 
 ```tsx
-import { useEffect } from 'react'
-import { createActivityTracker } from '@albatros/auth-shared'
+import { useIdleLock } from '@albatros/auth-shared/react'
 
-export function useIdleLock(opts: {
-  timeoutMinutes: number
-  onLock: () => void
-  onActivity?: () => void
-}): void {
-  useEffect(() => {
-    if (!opts.timeoutMinutes) return
-    const tracker = createActivityTracker({
-      timeoutMs: opts.timeoutMinutes * 60_000,
-      onIdle: opts.onLock,
-    })
-    tracker.start()
-
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel']
-    let lastActivity = 0
-    const handler = () => {
-      tracker.recordActivity()
-      // Throttle the IPC call to once per second
-      const now = Date.now()
-      if (now - lastActivity > 1000) {
-        lastActivity = now
-        opts.onActivity?.()
-      }
-    }
-    events.forEach((e) => window.addEventListener(e, handler))
-
-    return () => {
-      tracker.stop()
-      events.forEach((e) => window.removeEventListener(e, handler))
-    }
-  }, [opts.timeoutMinutes, opts.onLock, opts.onActivity])
-}
-```
-
-In the App component:
-
-```tsx
 useIdleLock({
-  timeoutMinutes: lockTimeoutMinutes,
-  onLock: () => window.electronAPI.auth.lock(),
-  onActivity: () => window.electronAPI.auth.recordActivity(),
+  timeoutMinutes: isUnlocked ? lockTimeoutMinutes : 0,
+  // Only a request: the main process refuses while another Albatros app is active
+  requestLock: () => window.electronAPI.auth.requestLock(),
+  onActivity: () => { void window.electronAPI.auth.recordActivity() },
 })
 ```
+
+Without React, `attachActivityTracking` from `/browser` takes the same
+`requestLock`.
 
 ## Biometric unlock (Windows Hello)
 
@@ -377,7 +352,7 @@ import {
   DEFAULT_ACTIVITY_THROTTLE_MS, DEFAULT_WATCH_DEBOUNCE_MS,
 
   // Auto-lock
-  createActivityTracker, createIdleWatcher, DEFAULT_IDLE_POLL_MS,
+  createActivityTracker, createIdleWatcher, createRequestLockHandler, DEFAULT_IDLE_POLL_MS,
 
   // Migration
   migrateLocalAuthToShared, detectMigrationConflict, appendMigrationLog,

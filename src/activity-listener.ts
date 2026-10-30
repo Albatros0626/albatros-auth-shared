@@ -11,8 +11,9 @@
  */
 
 import { createActivityTracker } from './activity-tracker'
+import type { RequestLockResult } from './types'
 
-/** Default DOM events watched. Same set used by all 3 consumer apps. */
+/** Default DOM events watched. Same set used by all consumer apps. */
 export const DEFAULT_ACTIVITY_EVENTS: ReadonlyArray<string> = [
   'mousemove',
   'mousedown',
@@ -41,8 +42,14 @@ export interface AttachActivityTrackingOpts {
   target: ActivityEventTarget
   /** Idle timeout in milliseconds. */
   timeoutMs: number
-  /** Fired after `timeoutMs` without any tracked event. */
-  onIdle: () => void
+  /**
+   * Called after `timeoutMs` without any tracked event in this window. Must
+   * reach `createRequestLockHandler` in the main process (via IPC, typically
+   * `auth:requestLock`), which refuses while another Albatros app is active.
+   * Never an unconditional lock: that is the cascade of TROUBLESHOOTING
+   * Bug #4 and #5, and why this option replaced `onIdle` in v4.0.0.
+   */
+  requestLock: () => Promise<RequestLockResult>
   /** Fired on each tracked event, throttled to `throttleMs`. Optional. */
   onActivity?: () => void
   /** Events to listen for. Default: mouse + keyboard + wheel + touch. */
@@ -57,6 +64,9 @@ export interface AttachActivityTrackingOpts {
  * - Every tracked DOM event resets the idle timer (no throttle on tracker).
  * - `onActivity` (typically the IPC bump) is throttled to `throttleMs` so
  *   the main process is not flooded with mousemoves.
+ * - A refused `requestLock` needs no handling: the timer stays dormant until
+ *   the next event in this window, and the main idle-watcher locks once the
+ *   shared session expires.
  * - Returns a dispose function that stops the tracker and detaches listeners.
  *
  * Calling `attachActivityTracking({ timeoutMs: 0, ... })` returns a no-op
@@ -66,7 +76,7 @@ export function attachActivityTracking(opts: AttachActivityTrackingOpts): () => 
   const {
     target,
     timeoutMs,
-    onIdle,
+    requestLock,
     onActivity,
     events = DEFAULT_ACTIVITY_EVENTS,
     throttleMs = DEFAULT_IPC_THROTTLE_MS,
@@ -76,7 +86,17 @@ export function attachActivityTracking(opts: AttachActivityTrackingOpts): () => 
     return () => { /* no-op */ }
   }
 
-  const tracker = createActivityTracker({ timeoutMs, onIdle })
+  const tracker = createActivityTracker({
+    timeoutMs,
+    onIdle: () => {
+      // A synchronous throw is already logged by the tracker; an IPC failure
+      // arrives as a rejection and must not escape as an unhandled one.
+      Promise.resolve(requestLock()).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('[activity-listener] requestLock failed:', err)
+      })
+    },
+  })
   tracker.start()
 
   // Use -Infinity so the very first event always fires (leading-edge throttle)

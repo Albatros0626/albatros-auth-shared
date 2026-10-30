@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { attachActivityTracking } from './activity-listener'
-import type { BiometricUnlockResult } from './types'
+import type { BiometricUnlockResult, RequestLockResult } from './types'
 
 export interface UseIdleLockOpts {
   /**
@@ -22,8 +22,15 @@ export interface UseIdleLockOpts {
    * useful while the app is locked or before initial unlock.
    */
   timeoutMinutes: number
-  /** Called once when the idle timeout elapses without activity. */
-  onLock: () => void
+  /**
+   * Called once when the idle timeout elapses without activity in this
+   * window. Must reach `createRequestLockHandler` in the main process (via
+   * IPC, typically `auth:requestLock`), which refuses while another Albatros
+   * app is active. Never an unconditional lock: that is the cascade of
+   * TROUBLESHOOTING Bug #4 and #5, and why this option replaced `onLock` in
+   * v4.0.0.
+   */
+  requestLock: () => Promise<RequestLockResult>
   /**
    * Called on every tracked activity (throttled). Typically used to push the
    * activity to the main process via IPC so the cross-app session stays alive.
@@ -35,26 +42,34 @@ export interface UseIdleLockOpts {
  * Auto-lock the app after `timeoutMinutes` of inactivity in the renderer.
  *
  * Activity is detected via DOM events on `window` (mouse / keyboard / touch /
- * wheel). Callers can pass inline arrow functions for `onLock` and
+ * wheel). Callers can pass inline arrow functions for `requestLock` and
  * `onActivity` without worrying about effect re-runs — the hook captures
  * the latest references via refs internally.
+ *
+ * ```tsx
+ * useIdleLock({
+ *   timeoutMinutes: isUnlocked ? lockTimeoutMinutes : 0,
+ *   requestLock: () => window.electronAPI.auth.requestLock(),
+ *   onActivity: () => { void window.electronAPI.auth.recordActivity() },
+ * })
+ * ```
  */
 export function useIdleLock(opts: UseIdleLockOpts): void {
-  const { timeoutMinutes, onLock, onActivity } = opts
+  const { timeoutMinutes, requestLock, onActivity } = opts
 
-  const onLockRef = useRef(onLock)
+  const requestLockRef = useRef(requestLock)
   const onActivityRef = useRef(onActivity)
   useEffect(() => {
-    onLockRef.current = onLock
+    requestLockRef.current = requestLock
     onActivityRef.current = onActivity
-  }, [onLock, onActivity])
+  }, [requestLock, onActivity])
 
   useEffect(() => {
     if (!timeoutMinutes || timeoutMinutes <= 0) return
     return attachActivityTracking({
       target: window,
       timeoutMs: timeoutMinutes * 60_000,
-      onIdle: () => onLockRef.current(),
+      requestLock: () => requestLockRef.current(),
       onActivity: () => onActivityRef.current?.(),
     })
   }, [timeoutMinutes])

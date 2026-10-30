@@ -9,7 +9,8 @@
  * file compiles in a Node tsconfig (no DOM lib). Browsers' `window` satisfies
  * the interface naturally.
  */
-/** Default DOM events watched. Same set used by all 3 consumer apps. */
+import type { RequestLockResult } from './types';
+/** Default DOM events watched. Same set used by all consumer apps. */
 export declare const DEFAULT_ACTIVITY_EVENTS: ReadonlyArray<string>;
 export declare const DEFAULT_IPC_THROTTLE_MS = 1000;
 /**
@@ -27,8 +28,14 @@ export interface AttachActivityTrackingOpts {
     target: ActivityEventTarget;
     /** Idle timeout in milliseconds. */
     timeoutMs: number;
-    /** Fired after `timeoutMs` without any tracked event. */
-    onIdle: () => void;
+    /**
+     * Called after `timeoutMs` without any tracked event in this window. Must
+     * reach `createRequestLockHandler` in the main process (via IPC, typically
+     * `auth:requestLock`), which refuses while another Albatros app is active.
+     * Never an unconditional lock: that is the cascade of TROUBLESHOOTING
+     * Bug #4 and #5, and why this option replaced `onIdle` in v4.0.0.
+     */
+    requestLock: () => Promise<RequestLockResult>;
     /** Fired on each tracked event, throttled to `throttleMs`. Optional. */
     onActivity?: () => void;
     /** Events to listen for. Default: mouse + keyboard + wheel + touch. */
@@ -42,6 +49,9 @@ export interface AttachActivityTrackingOpts {
  * - Every tracked DOM event resets the idle timer (no throttle on tracker).
  * - `onActivity` (typically the IPC bump) is throttled to `throttleMs` so
  *   the main process is not flooded with mousemoves.
+ * - A refused `requestLock` needs no handling: the timer stays dormant until
+ *   the next event in this window, and the main idle-watcher locks once the
+ *   shared session expires.
  * - Returns a dispose function that stops the tracker and detaches listeners.
  *
  * Calling `attachActivityTracking({ timeoutMs: 0, ... })` returns a no-op

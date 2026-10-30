@@ -21,25 +21,33 @@ const activity_listener_1 = require("./activity-listener");
  * Auto-lock the app after `timeoutMinutes` of inactivity in the renderer.
  *
  * Activity is detected via DOM events on `window` (mouse / keyboard / touch /
- * wheel). Callers can pass inline arrow functions for `onLock` and
+ * wheel). Callers can pass inline arrow functions for `requestLock` and
  * `onActivity` without worrying about effect re-runs — the hook captures
  * the latest references via refs internally.
+ *
+ * ```tsx
+ * useIdleLock({
+ *   timeoutMinutes: isUnlocked ? lockTimeoutMinutes : 0,
+ *   requestLock: () => window.electronAPI.auth.requestLock(),
+ *   onActivity: () => { void window.electronAPI.auth.recordActivity() },
+ * })
+ * ```
  */
 function useIdleLock(opts) {
-    const { timeoutMinutes, onLock, onActivity } = opts;
-    const onLockRef = (0, react_1.useRef)(onLock);
+    const { timeoutMinutes, requestLock, onActivity } = opts;
+    const requestLockRef = (0, react_1.useRef)(requestLock);
     const onActivityRef = (0, react_1.useRef)(onActivity);
     (0, react_1.useEffect)(() => {
-        onLockRef.current = onLock;
+        requestLockRef.current = requestLock;
         onActivityRef.current = onActivity;
-    }, [onLock, onActivity]);
+    }, [requestLock, onActivity]);
     (0, react_1.useEffect)(() => {
         if (!timeoutMinutes || timeoutMinutes <= 0)
             return;
         return (0, activity_listener_1.attachActivityTracking)({
             target: window,
             timeoutMs: timeoutMinutes * 60_000,
-            onIdle: () => onLockRef.current(),
+            requestLock: () => requestLockRef.current(),
             onActivity: () => onActivityRef.current?.(),
         });
     }, [timeoutMinutes]);

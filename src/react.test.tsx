@@ -2,18 +2,22 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useIdleLock, useBiometricUnlock } from './react'
-import type { BiometricUnlockResult } from './types'
+import type { BiometricUnlockResult, RequestLockResult } from './types'
 
 afterEach(() => {
   vi.useRealTimers()
 })
+
+/** The main process's answer while another Albatros app is active. */
+const refused = (): Promise<RequestLockResult> =>
+  Promise.resolve({ locked: false, reason: 'cross-app-active' })
 
 describe('useIdleLock', () => {
   it('attaches DOM listeners on mount', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     renderHook(() => useIdleLock({
       timeoutMinutes: 10,
-      onLock: () => {},
+      requestLock: refused,
     }))
 
     expect(addSpy).toHaveBeenCalledWith('mousemove', expect.any(Function), expect.any(Object))
@@ -24,7 +28,7 @@ describe('useIdleLock', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     renderHook(() => useIdleLock({
       timeoutMinutes: 0,
-      onLock: () => {},
+      requestLock: refused,
     }))
 
     expect(addSpy).not.toHaveBeenCalled()
@@ -35,7 +39,7 @@ describe('useIdleLock', () => {
     const removeSpy = vi.spyOn(window, 'removeEventListener')
     const { unmount } = renderHook(() => useIdleLock({
       timeoutMinutes: 10,
-      onLock: () => {},
+      requestLock: refused,
     }))
     unmount()
     expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function))
@@ -45,19 +49,18 @@ describe('useIdleLock', () => {
   it('does NOT re-run the effect when callbacks change (ref pattern)', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
 
-    let onLockCalls = 0
     const { rerender } = renderHook(
-      ({ onLock }: { onLock: () => void }) =>
-        useIdleLock({ timeoutMinutes: 10, onLock }),
+      ({ requestLock }: { requestLock: () => Promise<RequestLockResult> }) =>
+        useIdleLock({ timeoutMinutes: 10, requestLock }),
       {
-        initialProps: { onLock: () => { onLockCalls++ } },
+        initialProps: { requestLock: () => refused() },
       }
     )
 
     const initialAddCalls = addSpy.mock.calls.length
 
-    // Re-render with a brand-new onLock arrow function (the foot-gun).
-    rerender({ onLock: () => { onLockCalls++ } })
+    // Re-render with a brand-new requestLock arrow function (the foot-gun).
+    rerender({ requestLock: () => refused() })
 
     // Effect must NOT have run again — listener count stays the same.
     expect(addSpy.mock.calls.length).toBe(initialAddCalls)
@@ -70,7 +73,7 @@ describe('useIdleLock', () => {
 
     const { rerender } = renderHook(
       ({ minutes }: { minutes: number }) =>
-        useIdleLock({ minutes, timeoutMinutes: minutes, onLock: () => {} } as any),
+        useIdleLock({ minutes, timeoutMinutes: minutes, requestLock: refused } as any),
       {
         initialProps: { minutes: 10 },
       }
@@ -84,7 +87,7 @@ describe('useIdleLock', () => {
     removeSpy.mockRestore()
   })
 
-  it('calls the LATEST onLock when idle fires (not the original closure)', () => {
+  it('calls the LATEST requestLock when idle fires (not the original closure)', () => {
     vi.useFakeTimers()
     let calls: string[] = []
 
@@ -92,18 +95,18 @@ describe('useIdleLock', () => {
       ({ tag }: { tag: string }) =>
         useIdleLock({
           timeoutMinutes: 1, // 60s
-          onLock: () => { calls.push(tag) },
+          requestLock: () => { calls.push(tag); return refused() },
         }),
       { initialProps: { tag: 'first' } }
     )
 
-    // Re-render with a different onLock that pushes 'second'
+    // Re-render with a different requestLock that pushes 'second'
     rerender({ tag: 'second' })
 
     // Advance past the idle timeout
     vi.advanceTimersByTime(60_001)
 
-    // The ref should have captured the LATEST onLock → tag 'second'
+    // The ref should have captured the LATEST requestLock → tag 'second'
     expect(calls).toEqual(['second'])
   })
 })

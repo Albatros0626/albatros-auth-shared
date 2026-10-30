@@ -14,7 +14,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_IPC_THROTTLE_MS = exports.DEFAULT_ACTIVITY_EVENTS = void 0;
 exports.attachActivityTracking = attachActivityTracking;
 const activity_tracker_1 = require("./activity-tracker");
-/** Default DOM events watched. Same set used by all 3 consumer apps. */
+/** Default DOM events watched. Same set used by all consumer apps. */
 exports.DEFAULT_ACTIVITY_EVENTS = [
     'mousemove',
     'mousedown',
@@ -29,17 +29,30 @@ exports.DEFAULT_IPC_THROTTLE_MS = 1_000;
  * - Every tracked DOM event resets the idle timer (no throttle on tracker).
  * - `onActivity` (typically the IPC bump) is throttled to `throttleMs` so
  *   the main process is not flooded with mousemoves.
+ * - A refused `requestLock` needs no handling: the timer stays dormant until
+ *   the next event in this window, and the main idle-watcher locks once the
+ *   shared session expires.
  * - Returns a dispose function that stops the tracker and detaches listeners.
  *
  * Calling `attachActivityTracking({ timeoutMs: 0, ... })` returns a no-op
  * dispose without attaching anything.
  */
 function attachActivityTracking(opts) {
-    const { target, timeoutMs, onIdle, onActivity, events = exports.DEFAULT_ACTIVITY_EVENTS, throttleMs = exports.DEFAULT_IPC_THROTTLE_MS, } = opts;
+    const { target, timeoutMs, requestLock, onActivity, events = exports.DEFAULT_ACTIVITY_EVENTS, throttleMs = exports.DEFAULT_IPC_THROTTLE_MS, } = opts;
     if (!timeoutMs || timeoutMs <= 0) {
         return () => { };
     }
-    const tracker = (0, activity_tracker_1.createActivityTracker)({ timeoutMs, onIdle });
+    const tracker = (0, activity_tracker_1.createActivityTracker)({
+        timeoutMs,
+        onIdle: () => {
+            // A synchronous throw is already logged by the tracker; an IPC failure
+            // arrives as a rejection and must not escape as an unhandled one.
+            Promise.resolve(requestLock()).catch((err) => {
+                // eslint-disable-next-line no-console
+                console.error('[activity-listener] requestLock failed:', err);
+            });
+        },
+    });
     tracker.start();
     // Use -Infinity so the very first event always fires (leading-edge throttle)
     // even when Date.now() returns 0 in tests with `vi.setSystemTime(0)`.

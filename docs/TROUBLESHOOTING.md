@@ -14,7 +14,8 @@ considérer pour une future version).
 | 1 | Auto-lock "malgré l'activité" | ✅ Cause définitive en **Bug #4** | v2.0.1 (defense) + per-app `auth:requestLock` |
 | 2 | Crashes `X is not iterable` post-unlock | ✅ Résolu | **v2.0.0** (`throw NotUnlockedError`) |
 | 3 | Race `verifyCode` → re-lock instantané | ✅ Résolu | per-app reorder + **v2.0.1** (deferred initial check) |
-| 4 | Cascade : un tracker idle locke toutes les apps | ✅ Résolu | per-app `auth:requestLock` IPC |
+| 4 | Cascade : un tracker idle locke toutes les apps | ✅ Résolu | per-app `auth:requestLock` IPC, puis **v4.0.0** |
+| 5 | Mémoire BM réintroduit la cascade du Bug #4 | ✅ Résolu | per-app (Mémoire BM) + **v4.0.0** (`createRequestLockHandler`, `requestLock` obligatoire) |
 
 ---
 
@@ -658,7 +659,7 @@ Conséquence UX : si tu reviens sur une app qui a déjà fire son onIdle
 refusé, le premier mouvement de souris/clic relance les 10 min depuis ce
 moment-là. Pas de lock spurious tant que tu interagis.
 
-### Pistes d'amélioration côté package (non implémentées)
+### Pistes d'amélioration côté package (implémentées en v4.0.0, cf. Bug #5)
 
 - **Hisser `auth:requestLock` dans le package** : 3 apps ont la même
   implémentation, candidat à factorisation. Un futur `createRequestLockHandler({ sessionService, authState })`
@@ -667,6 +668,91 @@ moment-là. Pas de lock spurious tant que tu interagis.
   callback `onLockRequest` qui retourne le résultat structuré, ou
   carrément une option `consultSessionBeforeLocking: true` qui fait
   l'IPC en interne. À mûrir.
+
+Restées non implémentées, elles ont laissé la règle à redécouvrir par
+chaque nouvelle app : c'est le Bug #5.
+
+---
+
+## Bug #5 — Mémoire BM réintroduit la cascade du Bug #4
+
+### Symptôme rapporté
+
+> *"L'application se verrouille de façon inopinée sans sembler tenir
+> compte de l'activité en cours."* (Prospector V2, 2026-10-30)
+
+### Diagnostic
+
+`session.bin` relevé juste après le verrouillage :
+
+```json
+{
+  "version": 2,
+  "unlockedAt":     "2026-10-30T15:13:16.126Z",
+  "lastActivityAt": "2026-10-30T15:20:06.166Z",
+  "lockTimeoutMinutes": 10,
+  "lockedAt":       "2026-10-30T15:23:17.321Z",
+  "unlockerAppId": "candidate-manager"
+}
+```
+
+- Verrou posé **3 min 11 s** après la dernière activité, pour un délai
+  de 10 min : ce n'est pas une expiration. Ni l'idle-watcher du main ni
+  `auth:requestLock` n'auraient verrouillé.
+- Verrou posé **10 min 1 s** après le déverrouillage : la signature d'un
+  minuteur renderer démarré au déverrouillage, dans une fenêtre restée
+  sans événement DOM.
+- Quatre apps ouvertes : Prospector V2, Cadence, Candidate Manager et
+  **Mémoire BM**, ouverte depuis la veille en arrière-plan. Les trois
+  premières passent par `auth:requestLock` depuis le Bug #4 ; pas
+  Mémoire BM.
+
+### Cause
+
+Mémoire BM, intégrée après le Bug #4, avait :
+
+- son propre `hooks/useIdleLock.ts`, bâti sur `createActivityTracker`
+  importé de `/browser`, dont l'`onIdle` appelait `lock()` ;
+- côté main, seulement `auth:lock`, inconditionnel.
+
+Même cascade qu'au Bug #4 : 10 min sans événement dans *sa* fenêtre →
+`auth:lock` → `session.bin#lockedAt` → toutes les apps verrouillées.
+
+**Pourquoi elle est revenue.** Le hook local est une copie quasi
+littérale de l'étape 6 d'`INTEGRATION.md`, et son câblage suit l'étape 8
+(`onLock: () => { void lock() }`), comme l'exemple du README
+(`onLock: () => window.electronAPI.auth.lock()`). Le correctif du Bug #4
+avait été appliqué dans les trois apps, mais ni dans la documentation ni
+dans le package : la règle restait à redécouvrir par chaque nouvelle app.
+
+### Correctif côté app
+
+Mémoire BM : handler `auth:requestLock` ; verrou seulement *demandé*,
+après vidange des sauvegardes en attente, via le `useIdleLock` du
+package ; copie locale du hook supprimée ; `auth:setLockTimeoutMinutes`
+propage aussi le délai à `session.bin`. Tests de non-régression inclus.
+Commit `09f67af` (monorepo Mémoire + Cadence, branche
+`fix/memoire-bm-verrou-inactivite`).
+
+### Correctif côté package — v4.0.0
+
+Les deux pistes du Bug #4 sont implémentées, et la règle devient
+intrinsèque au lieu d'être seulement documentée :
+
+- `createRequestLockHandler({ sessionService, authState })` porte la
+  décision côté main, jusque-là recopiée dans chaque app.
+- `useIdleLock` et `attachActivityTracking` exigent
+  `requestLock: () => Promise<RequestLockResult>` à la place de
+  `onLock` / `onIdle`. Y brancher un verrou inconditionnel, qui ne
+  renvoie rien, ne compile plus.
+- `createActivityTracker` n'est plus exporté par `/browser` : un renderer
+  ne peut plus bâtir son propre minuteur sur un `onIdle` nu, comme l'a
+  fait Mémoire BM.
+- README et INTEGRATION.md ne montrent plus que le câblage correct.
+
+Reste possible, et ne peut pas être empêché : appeler `auth:lock`
+ailleurs que derrière un bouton. Le verrou manuel doit rester
+inconditionnel, et le package ne connaît pas l'intention de l'appelant.
 
 ---
 
@@ -693,6 +779,7 @@ moment-là. Pas de lock spurious tant que tu interagis.
 | 2026-05-04 | **v1.2.0** | sleep-aware idle-watcher + `/react useIdleLock` + `isGuardedError` | ✅ |
 | 2026-05-04 | **v2.0.0** | `createGuardedHandle` throws `NotUnlockedError` (BREAKING) → résout Bug #2 | ✅ |
 | 2026-05-04 | **v2.0.1** | `idle-watcher` initial check déféré → defense pour Bug #3 | ✅ |
+| 2026-10-30 | **v4.0.0** | `createRequestLockHandler` + `requestLock` obligatoire (BREAKING renderer) → Bug #5 | ✅ |
 
 ### Timeline des bugs
 
@@ -722,6 +809,13 @@ moment-là. Pas de lock spurious tant que tu interagis.
   poussé de l'activité dans la fenêtre `lockTimeoutMinutes`. Bug #1
   considéré comme résolu par ricochet.
 
+- **2026-10-30** — **Bug #5** : verrouillages inopinés dans Prospector.
+  `session.bin` montre un verrou 3 min après la dernière activité, pour
+  un délai de 10 min. Cause : Mémoire BM, intégrée d'après une
+  documentation restée au câblage d'avant le Bug #4, verrouillait sans
+  condition. Fix Mémoire BM + release v4.0.0, qui rend `requestLock`
+  obligatoire.
+
 ### Inventaire des commits côté apps
 
 | App | Phase 1 (Bug #1+#2 patches locaux) | Phase 2 (v1.2.0+v2.0.0) | Phase 3 (Bug #3 reorder) | Phase 4 (Bug #4 requestLock) |
@@ -729,3 +823,4 @@ moment-là. Pas de lock spurious tant que tu interagis.
 | Prospector V2 | `63db20d` | `523d687` + `ea53525` | `826d3c2` | [`0570fed`](https://github.com/Albatros0626/PROSPECTOR/commit/0570fed) |
 | Cadence | — | `40d14b6` + `74b477e` | `3d980b3` | [`360c424`](https://github.com/Albatros0626/Cadence/commit/360c424) |
 | Candidate Manager | — | `214e9cd` + `31e8181` | `55e1f79` | [`751e93d`](https://github.com/Albatros0626/RECRUITER/commit/751e93d) |
+| Mémoire BM | — | — | — | `09f67af` (Bug #5, branche `fix/memoire-bm-verrou-inactivite`) |

@@ -2,7 +2,7 @@
 
 Guide d'intégration pas-à-pas pour brancher une app Electron sur la mutualisation auth Albatros (mot de passe partagé, déverrouillage cross-app, auto-lock).
 
-**Apps déjà intégrées (servent de référence)** : Prospector V2, Cadence, Candidate Manager.
+**Apps déjà intégrées (servent de référence)** : Prospector V2, Cadence, Candidate Manager, Mémoire BM.
 
 **Effort estimé** : ~30 minutes pour une intégration propre, ~1h si l'app a déjà un système d'auth local à migrer.
 
@@ -11,9 +11,9 @@ Guide d'intégration pas-à-pas pour brancher une app Electron sur la mutualisat
 ## TL;DR
 
 ```bash
-# 1. Installer le package (≥ v1.2.0 recommandé)
-pnpm add github:Albatros0626/albatros-auth-shared#v1.2.0
-# (ou npm install --save github:Albatros0626/albatros-auth-shared#v1.2.0)
+# 1. Installer le package (≥ v4.0.0 recommandé)
+pnpm add github:Albatros0626/albatros-auth-shared#v4.0.0
+# (ou npm install --save github:Albatros0626/albatros-auth-shared#v4.0.0)
 ```
 
 Côté main :
@@ -22,27 +22,41 @@ Côté main :
 - Ajouter `app.setName('<NomDeLApp>')` au tout début
 - Brancher migration + session.watch + idle-watcher
 - Adapter les handlers `auth:*` et `secrets:*` pour utiliser les services injectés
+- Brancher `auth:requestLock` sur `createRequestLockHandler` (verrou d'inactivité)
 
 Côté renderer :
-- Importer le hook `useIdleLock` directement depuis le package (≥ v1.2.0) :
-  `import { useIdleLock } from '@albatros/auth-shared/react'` — plus de copie locale à maintenir.
+- Importer le hook `useIdleLock` directement depuis le package :
+  `import { useIdleLock } from '@albatros/auth-shared/react'` — jamais de copie locale.
+  Son `requestLock` appelle `auth:requestLock`, **jamais** `auth:lock` (cf. premier piège ci-dessous).
 - Store/context auth : ajouter `applyExternalState` + subscribe à `onStateChanged`
 - Pour les autres imports renderer, utiliser `@albatros/auth-shared/browser` (pas le main entry) — sinon Vite plante sur les modules Node.
 
 ### Pièges courants
 
+**Auto-lock — verrou inconditionnel (Bugs #4 et #5).** Le minuteur d'inactivité du renderer ne voit que les événements de *sa* fenêtre. S'il appelle `auth:lock`, une app laissée ouverte en arrière-plan verrouille toutes les autres au bout du délai, pendant que l'utilisateur travaille ailleurs. Il ne fait donc que *demander* le verrou ; le main ne l'accorde que si la session partagée a expiré pour toutes les apps :
+
+```tsx
+// ❌ Verrouille toutes les apps Albatros dès que CETTE fenêtre est inactive (ne compile plus en v4)
+useIdleLock({ timeoutMinutes, onLock: () => { void lock() } })
+
+// ✅ v4.0.0
+useIdleLock({ timeoutMinutes, requestLock: () => window.electronAPI.auth.requestLock() })
+```
+
+`auth:lock` reste réservé au bouton « Verrouiller » : là, l'utilisateur l'a demandé.
+
 **Auto-lock — callbacks instables.** Avant la v1.2.0, passer des arrow functions inline à `useIdleLock` causait une re-création du tracker à chaque render du parent :
 
 ```tsx
-// ❌ Anti-pattern (v1.1.x : effet recréé à chaque render → timer reset)
+// ❌ Anti-pattern d'une copie locale du hook (effet recréé à chaque render → timer reset)
 useIdleLock({
   timeoutMinutes,
-  onLock:    () => { void lock() },
-  onActivity:() => { void window.electronAPI.authRecordActivity() },
+  requestLock: () => window.electronAPI.auth.requestLock(),
+  onActivity:  () => { void window.electronAPI.auth.recordActivity() },
 })
 ```
 
-À partir de la v1.2.0, le hook utilise `useRef` en interne — vous pouvez passer des arrow functions inline en toute sécurité, l'effet ne se re-run que sur changement de `timeoutMinutes`.
+Le hook du package utilise `useRef` en interne (depuis la v1.2.0) — vous pouvez passer des arrow functions inline en toute sécurité, l'effet ne se re-run que sur changement de `timeoutMinutes`. Raison de plus pour ne pas en écrire de copie locale.
 
 **Erreur `NOT_UNLOCKED` côté store.** Quand un appel IPC `guardedHandle()` court-circuite parce que l'app est verrouillée, le main retourne actuellement (v1.x) un objet `{ success: false, error: { code: 'NOT_UNLOCKED', ... } }`. Si le store le stocke tel quel, les composants crashent ensuite sur `.filter()` / itération. Utiliser `isGuardedError` :
 
@@ -94,8 +108,7 @@ electron/
 
 src/
 ├── contexts/AuthContext.tsx (ou stores/auth.ts)  ← MODIFIÉ — applyExternalState
-├── hooks/useIdleLock.ts                           ← NOUVEAU ou MODIFIÉ
-└── App.tsx                                        ← MODIFIÉ — subscribe + wire idle
+└── App.tsx                                        ← MODIFIÉ — subscribe + useIdleLock du package
 ```
 
 **Stockage sur le PC utilisateur** :
@@ -357,6 +370,7 @@ app.whenReady().then(async () => {
 ```typescript
 // electron/ipc/auth.ts
 import { IpcMain } from 'electron'
+import { createRequestLockHandler } from '@albatros/auth-shared'
 import { getAuthContext } from '../auth-context'
 
 export function setupAuthHandlers(ipcMain: IpcMain): void {
@@ -380,7 +394,12 @@ export function setupAuthHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('auth:setLockTimeoutMinutes', (_e, minutes: number) => {
-    try { authService.setLockTimeoutMinutes(minutes); return { success: true } }
+    try {
+      authService.setLockTimeoutMinutes(minutes)
+      // Les idle-watchers des autres apps lisent le délai dans session.bin
+      sessionService.updateLockTimeoutMinutes(minutes)
+      return { success: true }
+    }
     catch (e: any) { return { success: false, error: e.message } }
   })
 
@@ -443,11 +462,16 @@ export function setupAuthHandlers(ipcMain: IpcMain): void {
     catch (e: any) { return { success: false, error: e.message } }
   })
 
+  // Bouton « Verrouiller » : inconditionnel, l'utilisateur l'a demandé.
   ipcMain.handle('auth:lock', () => {
     authState.setUnlocked(false)
     sessionService.recordLock()
     return { success: true }
   })
+
+  // Minuteur d'inactivité du renderer (useIdleLock) : refusé tant qu'une autre
+  // app Albatros a de l'activité. Ne jamais le remplacer par auth:lock.
+  ipcMain.handle('auth:requestLock', createRequestLockHandler({ sessionService, authState }))
 
   ipcMain.handle('auth:recordActivity', () => {
     sessionService.recordActivity()
@@ -496,6 +520,8 @@ Ajouter les nouveaux channels et l'event listener :
 ```typescript
 const authAPI = {
   // ... handlers existants
+  /** Verrou d'inactivité : seulement une demande, que le main peut refuser. */
+  requestLock: () => ipcRenderer.invoke('auth:requestLock'),
   recordActivity: () => ipcRenderer.invoke('auth:recordActivity'),
   getLockTimeoutMinutes: () => ipcRenderer.invoke('auth:getLockTimeoutMinutes'),
   setLockTimeoutMinutes: (minutes: number) =>
@@ -516,55 +542,22 @@ Si l'app a un `electron.d.ts` (déclaration globale Window.electronAPI), ajouter
 
 ## Étape 6 : Hook `useIdleLock` côté renderer
 
-Créer ou mettre à jour `src/hooks/useIdleLock.ts` :
+Rien à créer : le hook est fourni par le package, sous le chemin `/react`
+(React est une dépendance pair optionnelle).
 
 ```typescript
-import { useEffect } from 'react'
-// ⚠️ IMPORTANT : importer depuis /browser, PAS depuis @albatros/auth-shared
-//                Le main entry pull crypto/fs/electron qui ne sont pas dans le browser bundle.
-import { createActivityTracker } from '@albatros/auth-shared/browser'
-
-const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
-  'mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel',
-]
-const IPC_THROTTLE_MS = 1_000
-
-export interface UseIdleLockOpts {
-  timeoutMinutes: number
-  onLock: () => void
-  onActivity?: () => void
-}
-
-export function useIdleLock(opts: UseIdleLockOpts): void {
-  const { timeoutMinutes, onLock, onActivity } = opts
-
-  useEffect(() => {
-    if (!timeoutMinutes || timeoutMinutes <= 0) return
-
-    const tracker = createActivityTracker({
-      timeoutMs: timeoutMinutes * 60_000,
-      onIdle: onLock,
-    })
-    tracker.start()
-
-    let lastIpcCall = 0
-    const handler = (): void => {
-      tracker.recordActivity()
-      const now = Date.now()
-      if (now - lastIpcCall > IPC_THROTTLE_MS) {
-        lastIpcCall = now
-        onActivity?.()
-      }
-    }
-    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, handler))
-
-    return () => {
-      tracker.stop()
-      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, handler))
-    }
-  }, [timeoutMinutes, onLock, onActivity])
-}
+import { useIdleLock } from '@albatros/auth-shared/react'
 ```
+
+**N'en écrivez pas de copie locale** autour d'un minuteur plus bas niveau :
+c'est ainsi que Mémoire BM a réintroduit la cascade du Bug #4 (cf.
+[TROUBLESHOOTING](TROUBLESHOOTING.md), Bug #5). Depuis la v4.0.0,
+`createActivityTracker` n'est d'ailleurs plus exporté par `/browser`. Sans
+React, `attachActivityTracking` (`/browser`) prend le même `requestLock`.
+
+Pour les autres imports renderer, utiliser `@albatros/auth-shared/browser`,
+jamais l'entrée principale : elle tire `crypto`, `fs` et `electron`, absents
+du bundle navigateur.
 
 ---
 
@@ -606,11 +599,11 @@ Dans `App.tsx` (ou équivalent) :
 
 ```typescript
 import { useEffect, useState } from 'react'
-import { useIdleLock } from './hooks/useIdleLock'
+import { useIdleLock } from '@albatros/auth-shared/react'
 import { useAuth } from './contexts/AuthContext' // ou useAuthStore
 
 function App() {
-  const { isUnlocked, lock, applyExternalState } = useAuth()
+  const { isUnlocked, applyExternalState } = useAuth()
   const [lockTimeoutMinutes, setLockTimeoutMinutes] = useState(10)
 
   // Charger le timeout depuis le vault après unlock
@@ -628,10 +621,12 @@ function App() {
     })
   }, [applyExternalState])
 
-  // Auto-lock par inactivité
+  // Auto-lock par inactivité : seulement une demande, que le main refuse
+  // tant qu'une autre app Albatros a de l'activité. Le bouton « Verrouiller »,
+  // lui, garde son appel direct à auth:lock.
   useIdleLock({
     timeoutMinutes: isUnlocked ? lockTimeoutMinutes : 0,
-    onLock: () => { void lock() },
+    requestLock: () => window.electronAPI.auth.requestLock(),
     onActivity: () => { void window.electronAPI.auth.recordActivity() },
   })
 
@@ -798,6 +793,7 @@ Le format du `auth.vault` est versionné (`version: 2` actuellement, avec `schem
 | `createGuardedHandle({ ipcMain, authState })` | Factory — wrapper IPC `NOT_UNLOCKED` |
 | `createSessionService({ sharedDir, appId, safeStorage })` | Factory — session.bin partagé |
 | `createIdleWatcher({ sessionService, onLock, pollMs? })` | Watcher main pour expiration |
+| `createRequestLockHandler({ sessionService, authState })` | Handler de `auth:requestLock` — verrou d'inactivité refusé tant qu'une app est active |
 | `migrateLocalAuthToShared({ ... })` | One-shot legacy → shared |
 | `detectMigrationConflict({ ... })` | Vérifie si conflit (les 2 vaults existent) |
 | `appendMigrationLog(logPath, entry)` | Append JSONL |
@@ -810,11 +806,20 @@ Le format du `auth.vault` est versionné (`version: 2` actuellement, avec `schem
 
 | Symbole | Description |
 |---|---|
-| `createActivityTracker({ timeoutMs, onIdle })` | Pure JS — détecteur d'inactivité |
+| `attachActivityTracking({ target, timeoutMs, requestLock, onActivity? })` | Détecteur d'inactivité sans React — le verrou n'est que demandé |
 | `RECOVERY_QUESTIONS` | Liste pré-définie des questions secrètes |
 | `CUSTOM_QUESTION_MIN_LENGTH` | 10 |
 | `RECOVERY_ANSWER_MIN_LENGTH` | 4 |
-| Type `LockoutStatus` | Pour les types renderer |
+| Types `LockoutStatus`, `RequestLockResult` | Pour les types renderer |
+
+`createActivityTracker` n'est plus exporté ici depuis la v4.0.0 (cf. TROUBLESHOOTING, Bug #5).
+
+### Renderer React (depuis `@albatros/auth-shared/react`)
+
+| Symbole | Description |
+|---|---|
+| `useIdleLock({ timeoutMinutes, requestLock, onActivity? })` | Auto-lock par inactivité — `requestLock` appelle `auth:requestLock` |
+| `useBiometricUnlock({ unlock, onUnlocked? })` | Bouton Windows Hello de l'écran de déverrouillage |
 
 ---
 

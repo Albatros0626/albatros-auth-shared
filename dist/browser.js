@@ -8,12 +8,16 @@
  * modules in the browser bundle.
  *
  * Usage:
- *   import { createActivityTracker, RECOVERY_QUESTIONS } from '@albatros/auth-shared/browser'
+ *   import { attachActivityTracking, RECOVERY_QUESTIONS } from '@albatros/auth-shared/browser'
+ *
+ * `createActivityTracker` is deliberately NOT exported here since v4.0.0: its
+ * bare `onIdle` is how an app ended up locking every sibling on its own
+ * inactivity (TROUBLESHOOTING Bug #5). In the renderer, idle detection goes
+ * through `attachActivityTracking` or `useIdleLock`, which require a
+ * `requestLock` answered by the main process.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.isNotUnlockedError = exports.isGuardedError = exports.DEFAULT_IPC_THROTTLE_MS = exports.DEFAULT_ACTIVITY_EVENTS = exports.attachActivityTracking = exports.createActivityTracker = void 0;
-var activity_tracker_1 = require("./activity-tracker");
-Object.defineProperty(exports, "createActivityTracker", { enumerable: true, get: function () { return activity_tracker_1.createActivityTracker; } });
+exports.RECOVERY_ANSWER_MIN_LENGTH = exports.CUSTOM_QUESTION_MIN_LENGTH = exports.RECOVERY_QUESTIONS = exports.isNotUnlockedError = exports.isGuardedError = exports.DEFAULT_IPC_THROTTLE_MS = exports.DEFAULT_ACTIVITY_EVENTS = exports.attachActivityTracking = void 0;
 var activity_listener_1 = require("./activity-listener");
 Object.defineProperty(exports, "attachActivityTracking", { enumerable: true, get: function () { return activity_listener_1.attachActivityTracking; } });
 Object.defineProperty(exports, "DEFAULT_ACTIVITY_EVENTS", { enumerable: true, get: function () { return activity_listener_1.DEFAULT_ACTIVITY_EVENTS; } });

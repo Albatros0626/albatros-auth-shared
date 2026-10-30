@@ -13,11 +13,17 @@ import {
   BiometricUnavailableError,
   BiometricCodeRejectedError,
   BiometricNonDeterministicError,
+  createRequestLockHandler,
 } from './index'
+import * as browserEntry from './browser'
 
 describe('package public API', () => {
   it('exports VERSION constant', () => {
-    expect(VERSION).toBe('3.0.1')
+    expect(VERSION).toBe('4.0.0')
+  })
+
+  it('exports the request-lock handler factory', () => {
+    expect(typeof createRequestLockHandler).toBe('function')
   })
 
   it('exports auth-service factory', () => {
@@ -49,5 +55,14 @@ describe('package public API', () => {
     expect(typeof BiometricUnavailableError).toBe('function')
     expect(typeof BiometricCodeRejectedError).toBe('function')
     expect(typeof BiometricNonDeterministicError).toBe('function')
+  })
+})
+
+describe('browser entry', () => {
+  it('offers idle detection only through attachActivityTracking (requestLock required)', () => {
+    expect(typeof browserEntry.attachActivityTracking).toBe('function')
+    // Bug #5: a bare idle timer let an app lock every sibling on its own
+    // inactivity. The renderer must not be able to reach it any more.
+    expect('createActivityTracker' in browserEntry).toBe(false)
   })
 })

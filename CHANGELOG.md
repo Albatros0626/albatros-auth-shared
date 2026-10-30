@@ -6,6 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-30
+
+### Changed — BREAKING (renderer API)
+
+- **The renderer only ever *requests* the inactivity lock.** `useIdleLock`
+  (`/react`) replaces `onLock` with `requestLock`, and `attachActivityTracking`
+  (`/browser`) replaces `onIdle` with `requestLock`. Both must return the main
+  process's `RequestLockResult`, so wiring them to an unconditional lock —
+  which resolves to nothing — no longer type-checks.
+
+  **Why.** A renderer only sees the DOM events of its own window. If its timer
+  locks unconditionally, one Albatros app left idle in the background locks
+  every sibling while the user works in another one. Bug #4 fixed this app by
+  app in May. Mémoire BM, integrated later by following the README and
+  INTEGRATION.md — which still showed `onLock: () => lock()` — shipped it again
+  (TROUBLESHOOTING Bug #5). A rule each new app has to rediscover is not a
+  rule: it now lives in the package and in its types.
+
+- **`createActivityTracker` is no longer exported from `/browser`.** Its bare
+  `onIdle` is what Mémoire BM's local hook was built on. It stays in the main
+  entry (Node side), out of any renderer's reach.
+
+### Added
+
+- `createRequestLockHandler({ sessionService, authState })`: the main-side
+  decision every app used to copy as `auth:requestLock`. It grants the lock
+  only once the shared session has expired, i.e. no Albatros app recorded
+  activity within `lockTimeoutMinutes`, and returns a `RequestLockResult`
+  (`{ locked, reason }`), exported from the main entry and from `/browser`.
+- `attachActivityTracking` logs a rejected `requestLock` instead of letting it
+  escape as an unhandled rejection.
+
+### Migration from 3.x
+
+Main process — replace the hand-written handler:
+
+```ts
+ipcMain.handle('auth:requestLock', createRequestLockHandler({ sessionService, authState }))
+```
+
+Renderer — rename the option and return the IPC result:
+
+```tsx
+// 3.x
+useIdleLock({ timeoutMinutes, onLock: () => { void window.api.auth.requestLock() }, onActivity })
+// 4.0
+useIdleLock({ timeoutMinutes, requestLock: () => window.api.auth.requestLock(), onActivity })
+```
+
+The manual lock button keeps calling `auth:lock`, unconditionally: there, the
+user asked for it.
+
 ## [3.0.1] - 2026-08-17
 
 ### Tests

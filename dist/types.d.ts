@@ -255,6 +255,13 @@ export interface SessionState extends SessionContent {
     /** True iff `!isLocked && !isExpired`. */
     isValid: boolean;
 }
+/** Why an inactivity lock request was granted or refused. */
+export type RequestLockReason = 'no-session' | 'already-locked' | 'cross-app-active' | 'expired';
+/** Answer of `createRequestLockHandler` to an inactivity lock request. */
+export interface RequestLockResult {
+    locked: boolean;
+    reason: RequestLockReason;
+}
 export interface SessionFileEnvelope {
     version: number;
     ciphertext: string;

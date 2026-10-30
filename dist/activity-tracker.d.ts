@@ -1,3 +1,10 @@
+/**
+ * Low-level idle timer, deliberately absent from the `/browser` entry since
+ * v4.0.0. To lock an app on inactivity, use `useIdleLock` (`/react`) or
+ * `attachActivityTracking` (`/browser`): their `requestLock` goes through
+ * `createRequestLockHandler`. Wiring `onIdle` straight to an unconditional lock
+ * makes one idle app lock all the others (TROUBLESHOOTING Bug #4 and #5).
+ */
 export interface CreateActivityTrackerOpts {
     /** Idle timeout in milliseconds. Use `0` to disable idle detection. */
     timeoutMs: number;

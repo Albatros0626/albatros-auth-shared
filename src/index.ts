@@ -1,4 +1,4 @@
-export const VERSION = '3.0.1' as const
+export const VERSION = '4.0.0' as const
 
 export {
   createAuthService,
@@ -71,6 +71,9 @@ export type { ActivityTracker, CreateActivityTrackerOpts } from './activity-trac
 export { createIdleWatcher, DEFAULT_IDLE_POLL_MS } from './idle-watcher'
 export type { IdleWatcher, CreateIdleWatcherOpts } from './idle-watcher'
 
+export { createRequestLockHandler } from './request-lock'
+export type { CreateRequestLockHandlerOpts } from './request-lock'
+
 export {
   migrateLocalAuthToShared,
   detectMigrationConflict,
@@ -100,6 +103,8 @@ export type {
   CreateSecretsServiceOpts,
   SessionContent,
   SessionState,
+  RequestLockReason,
+  RequestLockResult,
   SessionFileEnvelope,
   CreateSessionServiceOpts,
   BiometricProviderLike,

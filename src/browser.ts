@@ -7,16 +7,14 @@
  * modules in the browser bundle.
  *
  * Usage:
- *   import { createActivityTracker, RECOVERY_QUESTIONS } from '@albatros/auth-shared/browser'
+ *   import { attachActivityTracking, RECOVERY_QUESTIONS } from '@albatros/auth-shared/browser'
+ *
+ * `createActivityTracker` is deliberately NOT exported here since v4.0.0: its
+ * bare `onIdle` is how an app ended up locking every sibling on its own
+ * inactivity (TROUBLESHOOTING Bug #5). In the renderer, idle detection goes
+ * through `attachActivityTracking` or `useIdleLock`, which require a
+ * `requestLock` answered by the main process.
  */
-
-export {
-  createActivityTracker,
-} from './activity-tracker'
-export type {
-  ActivityTracker,
-  CreateActivityTrackerOpts,
-} from './activity-tracker'
 
 export {
   attachActivityTracking,
@@ -40,4 +38,4 @@ export {
   RECOVERY_ANSWER_MIN_LENGTH,
 } from './recovery-questions'
 
-export type { LockoutStatus } from './types'
+export type { LockoutStatus, RequestLockReason, RequestLockResult } from './types'
